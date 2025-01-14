@@ -37,6 +37,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Ofast -ffast-math")
 find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(navtools REQUIRED)
+find_package(satutils REQUIRED)
 
 set(STURDINS_HDRS
     include/sturdins/ins.hpp
@@ -66,6 +67,7 @@ target_link_libraries(
     Eigen3::Eigen
     spdlog::spdlog
     navtools
+    satutils
 )
 
 # --- Add Executables ---

@@ -65,7 +65,7 @@ bool GaussNewton(
   const int N = psr.size();
   const int M = 2 * N;
   Eigen::VectorXd dy(M);
-  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(M, 8);
+  Eigen::MatrixXd H{Eigen::MatrixXd::Zero(M, 8)};
   for (int i = 0; i < N; i++) {
     H(i, 6) = 1.0;
     H(N + i, 7) = 1.0;
@@ -99,9 +99,9 @@ bool GaussNewton(
       H(N + i, 0) = udot(0);
       H(N + i, 1) = udot(1);
       H(N + i, 2) = udot(2);
-      H(i, 3) = u(0);
-      H(i, 4) = u(1);
-      H(i, 5) = u(2);
+      H(N + i, 3) = u(0);
+      H(N + i, 4) = u(1);
+      H(N + i, 5) = u(2);
       dy(i) = psr(i) - pred_psr;
       dy(N + i) = psrdot(i) - pred_psrdot;
     }

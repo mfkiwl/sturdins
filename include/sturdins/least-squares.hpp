@@ -24,26 +24,26 @@ namespace sturdins {
 /**
  * *=== RangeAndRate ===*
  * @brief predicts a range and rate based on a satellite location and velocity
- * @param pos         User ECEF position [m]
- * @param vel         User ECEF velocity [m/s]
+ * @param pos         3x1 User ECEF position [m]
+ * @param vel         3x1 User ECEF velocity [m/s]
  * @param cb          User clock bias [m]
  * @param cd          User clock drift [m/s]
- * @param sv_pos      Satellite ECEF positions [m]
- * @param sv_vel      Satellite ECEF velocities [m/s]
- * @param pred_u      reference to unit vector to satellite
- * @param pred_udot   reference to unit vector rate of change to satellite
+ * @param sv_pos      3xN Satellite ECEF positions [m]
+ * @param sv_vel      3xN Satellite ECEF velocities [m/s]
+ * @param pred_u      3x1 reference to unit vector to satellite
+ * @param pred_udot   3x1 reference to unit vector rate of change to satellite
  * @param pred_psr    Reference to pseudorange prediction
  * @param pred_psrdot Reference to pseudorange-rate prediction
  */
 void RangeAndRate(
-    const Eigen::Vector3d &pos,
-    const Eigen::Vector3d &vel,
+    const Eigen::Ref<const Eigen::Vector3d> &pos,
+    const Eigen::Ref<const Eigen::Vector3d> &vel,
     const double &cb,
     const double &cd,
-    const Eigen::Vector3d &sv_pos,
-    const Eigen::Vector3d &sv_vel,
-    Eigen::Vector3d &u,
-    Eigen::Vector3d &udot,
+    const Eigen::Ref<const Eigen::Vector3d> &sv_pos,
+    const Eigen::Ref<const Eigen::Vector3d> &sv_vel,
+    Eigen::Ref<Eigen::Vector3d> u,
+    Eigen::Ref<Eigen::Vector3d> udot,
     double &pred_psr,
     double &pred_psrdot);
 

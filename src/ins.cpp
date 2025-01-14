@@ -278,8 +278,8 @@ void Ins::GnssUpdate(
   Eigen::VectorXd dy(M);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(M, 17);
   for (int i = 0; i < N; i++) {
-    H(i, 6) = 1.0;
-    H(N + i, 7) = 1.0;
+    H(i, 15) = 1.0;
+    H(N + i, 16) = 1.0;
   }
   Eigen::MatrixXd R = Eigen::MatrixXd::Zero(M, M);
   R.diagonal() << psr_var, psrdot_var;
@@ -313,9 +313,9 @@ void Ins::GnssUpdate(
     H(N + i, 0) = udot(0);
     H(N + i, 1) = udot(1);
     H(N + i, 2) = udot(2);
-    H(i, 3) = u(0);
-    H(i, 4) = u(1);
-    H(i, 5) = u(2);
+    H(N + i, 3) = u(0);
+    H(N + i, 4) = u(1);
+    H(N + i, 5) = u(2);
     dy(i) = psr(i) - pred_psr;
     dy(N + i) = psrdot(i) - pred_psrdot;
   }
@@ -326,7 +326,7 @@ void Ins::GnssUpdate(
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
   Eigen::MatrixXd L = I17_ - K * H;
-  P_ = L * P_ * L.transpose() + K * R + K.transpose();
+  P_ = L * P_ * L.transpose() + K * R * K.transpose();
   x_ += K * dy;
 
   // Closed loop error corrections
@@ -339,8 +339,12 @@ void Ins::GnssUpdate(
   Eigen::Vector4d q_err{1.0, -0.5 * x_(6), -0.5 * x_(7), -0.5 * x_(8)};
   q_b_l_ = navtools::quatdot(q_err, q_b_l_);
   navtools::quat2dcm(C_b_l_, q_b_l_);
-  ba_ += x_.segment(9, 3);
-  bg_ += x_.segment(12, 3);
+  ba_(0) += x_(9);
+  ba_(1) += x_(10);
+  ba_(2) += x_(11);
+  bg_(0) += x_(12);
+  bg_(1) += x_(13);
+  bg_(2) += x_(14);
   cb_ += x_(15);
   cd_ += x_(16);
   x_.setZero();

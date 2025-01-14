@@ -109,7 +109,6 @@ class Kns {
       const Eigen::VectorXd &psr_var,
       const Eigen::VectorXd &psrdot_var);
 
- private:
   /**
    * @brief states
    */
@@ -122,6 +121,7 @@ class Kns {
   double cb_;   // clock bias [m]
   double cd_;   // clock drift [m/s]
 
+ private:
   /**
    * @brief Process noise allan variance parameters
    */

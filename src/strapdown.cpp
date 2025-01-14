@@ -106,24 +106,18 @@ void Strapdown::Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, 
   GravityVector();
   EarthRateVector();
   TransportRateVector();
-  Eigen::Vector3d we = w_ie_n_ + 2.0 * w_en_n_;
 
   // --- Attitude Integration ---
-  Eigen::Vector3d psi = (wb - C_b_l_.transpose() * (w_ie_n_ + w_en_n_)) * dt;  // dTheta
-  double gamma = 0.5 * psi.norm();
+  Eigen::Vector3d dTheta = (wb - C_b_l_.transpose() * (w_ie_n_ + w_en_n_)) * dt;
+  double gamma = 0.5 * dTheta.norm();
   double cgamma = std::cos(gamma);
-  if (gamma < 1e-5) {
-    psi *= 0.5;
-  } else {
-    double sgamma = std::sin(gamma);
-    psi *= (0.5 * sgamma / gamma);
-  }
+  dTheta *= (0.5 * std::sin(gamma) / gamma);
   Eigen::Matrix4d qdot{
       // clang-format off
-      {cgamma, -psi(0), -psi(1), -psi(2)},
-      {psi(0),  cgamma,  psi(2), -psi(1)},
-      {psi(1), -psi(2),  cgamma,  psi(0)},
-      {psi(2),  psi(1), -psi(0),  cgamma}
+      {   cgamma, -dTheta(0), -dTheta(1), -dTheta(2)},
+      {dTheta(0),     cgamma,  dTheta(2), -dTheta(1)},
+      {dTheta(1), -dTheta(2),     cgamma,  dTheta(0)},
+      {dTheta(2),  dTheta(1), -dTheta(0),     cgamma}
       // clang-format on
   };
   q_b_l_ = qdot * q_b_l_;
@@ -131,9 +125,10 @@ void Strapdown::Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, 
 
   // --- Velocity Integration ---
   Eigen::Vector3d fn = C_b_l_ * fb;
-  double dv_n = (fn(0) + g_(0) - (we(1) * vd_ - we(2) * ve_)) * dt;
-  double dv_e = (fn(1) + g_(1) - (we(0) * vd_ - we(2) * vn_)) * dt;
-  double dv_d = (fn(2) + g_(2) - (we(0) * ve_ - we(1) * vn_)) * dt;
+  Eigen::Vector3d wn = w_ie_n_ + 2.0 * w_en_n_;
+  double dv_n = (fn(0) + g_(0) - (wn(1) * vd_ - wn(2) * ve_)) * dt;
+  double dv_e = (fn(1) + g_(1) - (wn(0) * vd_ - wn(2) * vn_)) * dt;
+  double dv_d = (fn(2) + g_(2) - (wn(0) * ve_ - wn(1) * vn_)) * dt;
 
   // --- Position Integration ---
   phi_ += (vn_ + 0.5 * dv_n) / Hn_ * dt;

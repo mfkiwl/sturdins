@@ -90,7 +90,6 @@ class Strapdown {
    */
   void Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const double &dt);
 
- protected:
   /**
    * @brief states
    */
@@ -103,6 +102,7 @@ class Strapdown {
   Eigen::Vector4d q_b_l_;  // Body -> Local/Nav frame quaternion
   Eigen::Matrix3d C_b_l_;  // Body -> Local/Nav frame DCM
 
+ protected:
   /**
    * @brief Functions of latitude
    */

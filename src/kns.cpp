@@ -13,6 +13,7 @@
 
 #include "sturdins/kns.hpp"
 
+#include <iostream>
 #include <navtools/constants.hpp>
 
 #include "sturdins/least-squares.hpp"
@@ -23,10 +24,11 @@ namespace sturdins {
 Kns::Kns()
     : x_{Eigen::Vector<double, 8>::Zero()},
       P_{Eigen::Matrix<double, 8, 8>::Zero()},
-      F_{Eigen::Matrix<double, 8, 8>::Zero()},
+      F_{Eigen::Matrix<double, 8, 8>::Identity()},
       Q_{Eigen::Matrix<double, 8, 8>::Zero()},
       I8_{Eigen::Matrix<double, 8, 8>::Identity()},
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 3.0, 0.1;
 }
 Kns::Kns(
     const double lat,
@@ -50,6 +52,7 @@ Kns::Kns(
       F_{Eigen::Matrix<double, 8, 8>::Identity()},
       Q_{Eigen::Matrix<double, 8, 8>::Zero()},
       I8_{Eigen::Matrix<double, 8, 8>::Identity()} {
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 3.0, 0.1;
 }
 
 // *=== SetPosition ===*
@@ -126,10 +129,10 @@ void Kns::Propagate(const double &dt) {
   Q_(3, 3) = 0.5 * Sa_ * dt;
   Q_(4, 4) = Q_(3, 3);
   Q_(5, 5) = Q_(3, 3);
-  Q_(6, 6) = 0.5 * (h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb);
-  Q_(6, 7) = 0.5 * (h1_ * dt) + (h2_ * dtsq);
+  Q_(6, 6) = 0.5 * ((h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb));
+  Q_(6, 7) = 0.5 * ((h1_ * dt) + (h2_ * dtsq));
   Q_(7, 6) = Q_(6, 7);
-  Q_(7, 7) = 0.5 * (h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt);
+  Q_(7, 7) = 0.5 * ((h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt));
 
   // Functions of latitude
   sL_ = std::sin(phi_);
@@ -206,9 +209,9 @@ void Kns::GnssUpdate(
     H(N + i, 0) = udot(0);
     H(N + i, 1) = udot(1);
     H(N + i, 2) = udot(2);
-    H(i, 3) = u(0);
-    H(i, 4) = u(1);
-    H(i, 5) = u(2);
+    H(N + i, 3) = u(0);
+    H(N + i, 4) = u(1);
+    H(N + i, 5) = u(2);
     dy(i) = psr(i) - pred_psr;
     dy(N + i) = psrdot(i) - pred_psrdot;
   }
@@ -219,7 +222,7 @@ void Kns::GnssUpdate(
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
   Eigen::MatrixXd L = I8_ - K * H;
-  P_ = L * P_ * L.transpose() + K * R + K.transpose();
+  P_ = L * P_ * L.transpose() + K * R * K.transpose();
   x_ += K * dy;
 
   // Closed loop error corrections

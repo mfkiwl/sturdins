@@ -114,7 +114,6 @@ class Ins : public Strapdown {
       const Eigen::VectorXd &psr_var,
       const Eigen::VectorXd &psrdot_var);
 
- private:
   /**
    * @brief States not included from Strapdown
    */
@@ -123,6 +122,7 @@ class Ins : public Strapdown {
   double cb_;           // clock bias estimate
   double cd_;           // clock drift estimate
 
+ private:
   /**
    * @brief Kalman Filter Matrices (these have constant size)
    */

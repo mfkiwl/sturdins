@@ -15,3 +15,5 @@ wheels/
 .venv
 data
 .cache/
+*kns_results.bin
+*ins_results.bin
