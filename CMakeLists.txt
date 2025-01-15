@@ -43,6 +43,8 @@ set(STURDINS_HDRS
     include/sturdins/ins.hpp
     include/sturdins/kns.hpp
     include/sturdins/least-squares.hpp
+    include/sturdins/nav-clock.hpp
+    include/sturdins/nav-imu.hpp
     include/sturdins/strapdown.hpp
 )
 
@@ -50,6 +52,8 @@ set(STURDINS_SRCS
     src/ins.cpp
     src/kns.cpp
     src/least-squares.cpp
+    src/nav-clock.cpp
+    src/nav-imu.cpp
     src/strapdown.cpp
 )
 
@@ -71,13 +75,16 @@ target_link_libraries(
 )
 
 # --- Add Executables ---
-file(GLOB testfiles "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
-foreach(file ${testfiles})
-    # message(${file})
-    get_filename_component(testname ${file} NAME_WE)
-    add_executable(${testname} ${file})
-    target_link_libraries( ${testname} PUBLIC ${PROJECT_NAME})
-endforeach(file ${testfiles})
+if (NOT DEFINED INSTALL_STURDINS_EXAMPLES OR NOT INSTALL_STURDINS_EXAMPLES)
+else()
+    file(GLOB testfiles "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
+    foreach(file ${testfiles})
+        # message(${file})
+        get_filename_component(testname ${file} NAME_WE)
+        add_executable(${testname} ${file})
+        target_link_libraries( ${testname} PUBLIC ${PROJECT_NAME})
+    endforeach(file ${testfiles})
+endif()
 
 # --- Make Library 'Findable' for other CMake Packages ---
 include(CMakePackageConfigHelpers)

@@ -60,14 +60,14 @@ void RangeAndRate(
  * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
  */
 bool GaussNewton(
-    Eigen::VectorXd &x,
-    Eigen::MatrixXd &P,
-    const Eigen::MatrixXd &sv_pos,
-    const Eigen::MatrixXd &sv_vel,
-    const Eigen::VectorXd &psr,
-    const Eigen::VectorXd &psrdot,
-    const Eigen::VectorXd &psr_var,
-    const Eigen::VectorXd &psrdot_var);
+    Eigen::Ref<Eigen::VectorXd> x,
+    Eigen::Ref<Eigen::MatrixXd> P,
+    const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
+    const Eigen::Ref<const Eigen::MatrixXd> &sv_vel,
+    const Eigen::Ref<const Eigen::VectorXd> &psr,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+    const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot_var);
 }  // namespace sturdins
 
 #endif
