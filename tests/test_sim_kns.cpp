@@ -54,8 +54,8 @@ int main() {
       // extract truth data
       lla << navtools::DEG2RAD<> * truth.lat, navtools::DEG2RAD<> * truth.lon, truth.h;
       ned_v << truth.vn, truth.ve, truth.vd;
-      navtools::lla2ecef(ecef_p, lla);
-      navtools::ned2ecefv(ecef_v, ned_v, lla);
+      navtools::lla2ecef<double>(ecef_p, lla);
+      navtools::ned2ecefv<double>(ecef_v, ned_v, lla);
 
       // simulate clock
       ClockModel(clock_sim_state, T);
@@ -81,7 +81,7 @@ int main() {
         sturdins::GaussNewton(
             x, P, meas.sv_pos, meas.sv_vel, meas.psr, meas.psrdot, psr_var, psrdot_var);
         Eigen::Vector3d xyz = x.segment(0, 3);
-        navtools::ecef2lla(lla, xyz);
+        navtools::ecef2lla<double>(lla, xyz);
         std::cout << "LLA:    [" << truth.lat << ", " << truth.lon << ", " << truth.h << "]\n";
         std::cout << "LLA LS: [" << navtools::RAD2DEG<> * lla(0) << ", "
                   << navtools::RAD2DEG<> * lla(1) << ", " << lla(2) << "]\n";

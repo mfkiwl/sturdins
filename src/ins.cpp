@@ -337,8 +337,8 @@ void Ins::GnssUpdate(
   ve_ -= x_(4);
   vd_ -= x_(5);
   Eigen::Vector4d q_err{1.0, -0.5 * x_(6), -0.5 * x_(7), -0.5 * x_(8)};
-  q_b_l_ = navtools::quatdot(q_err, q_b_l_);
-  navtools::quat2dcm(C_b_l_, q_b_l_);
+  q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
   ba_(0) += x_(9);
   ba_(1) += x_(10);
   ba_(2) += x_(11);

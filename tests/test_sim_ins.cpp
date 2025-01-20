@@ -60,8 +60,8 @@ int main() {
         navtools::DEG2RAD<> * truth.yaw;
     wb << truth.wx, truth.wy, truth.wz;
     fb << truth.fx, truth.fy, truth.fz;
-    navtools::lla2ecef(ecef_p, lla);
-    navtools::ned2ecefv(ecef_v, ned_v, lla);
+    navtools::lla2ecef<double>(ecef_p, lla);
+    navtools::ned2ecefv<double>(ecef_v, ned_v, lla);
 
     if (i == 0) {
       // initialize to truth
@@ -110,7 +110,7 @@ int main() {
       filt.GnssUpdate(meas.sv_pos, meas.sv_vel, meas.psr, meas.psrdot, psr_var, psrdot_var);
 
       // Extract and save states
-      Eigen::Vector3d f_rpy = navtools::dcm2euler(filt.C_b_l_);
+      Eigen::Vector3d f_rpy = navtools::dcm2euler<true, double>(filt.C_b_l_);
       result.t = time;
       result.lat = navtools::RAD2DEG<> * filt.phi_;
       result.lon = navtools::RAD2DEG<> * filt.lam_;

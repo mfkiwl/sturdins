@@ -52,8 +52,8 @@ Strapdown::Strapdown(
           navtools::WGS84_R0<> * navtools::WGS84_RP<> / navtools::WGS84_MU<>} {
   // initialize attitude
   Eigen::Vector3d rpy{roll, pitch, yaw};
-  navtools::euler2quat(q_b_l_, rpy);
-  navtools::quat2dcm(C_b_l_, q_b_l_);
+  navtools::euler2quat<true, double>(q_b_l_, rpy);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
 }
 
 // *=== ~Strapdown ===*
@@ -77,12 +77,12 @@ void Strapdown::SetVelocity(const double &veln, const double &vele, const double
 // *=== SetAttitude ===*
 void Strapdown::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
   Eigen::Vector3d rpy{roll, pitch, yaw};
-  navtools::euler2quat(q_b_l_, rpy);
-  navtools::quat2dcm(C_b_l_, q_b_l_);
+  navtools::euler2quat<true, double>(q_b_l_, rpy);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
 }
 void Strapdown::SetAttitude(const Eigen::Matrix3d &C) {
   C_b_l_ = C;
-  navtools::dcm2quat(q_b_l_, C_b_l_);
+  navtools::dcm2quat<double>(q_b_l_, C_b_l_);
 }
 
 // *=== Mechanize ===*
@@ -136,7 +136,7 @@ void Strapdown::Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, 
   h_ -= (vd_ + 0.5 * dv_d) * dt;
 
   // Save integration result
-  navtools::quat2dcm(C_b_l_, q_b_l_);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
   vn_ += dv_n;
   ve_ += dv_e;
   vd_ += dv_d;
