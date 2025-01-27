@@ -13,6 +13,8 @@
 
 #include "sturdins/kns.hpp"
 
+#include <Eigen/src/Core/Matrix.h>
+
 #include <iostream>
 #include <navtools/constants.hpp>
 
@@ -154,6 +156,36 @@ void Kns::Propagate(const double &dt) {
   h_ -= vd_ * dt;
   cb_ += cd_ * dt;
 }
+void Kns::FalsePropagateState(
+    Eigen::Ref<Eigen::Vector3d> ecef_p,
+    Eigen::Ref<Eigen::Vector3d> ecef_v,
+    double &cb,
+    double &cd,
+    const double &dt) {
+  // update ecef position
+  double sLam = std::sin(lam_);
+  double cLam = std::cos(lam_);
+  sL_ = std::sin(phi_);
+  cL_ = std::cos(phi_);
+  sLsq_ = sL_ * sL_;
+  Eigen::Matrix3d C_l_e{
+      {-sL_ * cLam, -sLam, -cL_ * cLam}, {-sL_ * sLam, cLam, -cL_ * sLam}, {cL_, 0.0, -sL_}};
+  double t = 1.0 - navtools::WGS84_E2<> * sLsq_;
+  double sqt = std::sqrt(t);
+  Re_ = navtools::WGS84_R0<> / sqt;
+  Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+  He_ = Re_ + h_;
+  Hn_ = Rn_ + h_;
+  ecef_p_ << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_;
+  ecef_v_ << vn_, ve_, vd_;
+  ecef_v_ = C_l_e * ecef_v_;
+
+  // fake-propagate state into provided vectors
+  ecef_p = ecef_p_ + ecef_v_ * dt;
+  ecef_v = ecef_v_;
+  cb = cb_ + cd_ * dt;
+  cd = cd_;
+}
 
 // *=== GnssUpdate ===*
 void Kns::GnssUpdate(
@@ -175,11 +207,94 @@ void Kns::GnssUpdate(
   Eigen::MatrixXd R = Eigen::MatrixXd::Zero(M, M);
   R.diagonal() << psr_var, psrdot_var;
 
+  // //! Iterative EKF
+  // Eigen::Vector3d u, udot;
+  // Eigen::Vector3d ecef_p, ecef_v;
+  // double pred_psr, pred_psrdot, cLam, sLam, t, sqt;
+  // double lat = phi_, lon = lam_, alt = h_, veln = vn_, vele = ve_, veld = vd_, clkb = cb_,
+  //        clkd = cd_;
+  // Eigen::Matrix3d C_l_e, C_e_l;
+  // Eigen::MatrixXd PHt(8, M), K(8, M);
+  // Eigen::VectorXd x_k = x_;
+  // Eigen::VectorXd delta(8);
+  // for (int k = 0; k < 10; k++) {
+  //   // update user position
+  //   sLam = std::sin(lon);
+  //   cLam = std::cos(lon);
+  //   sL_ = std::sin(lat);
+  //   cL_ = std::cos(lat);
+  //   sLsq_ = sL_ * sL_;
+  //   C_l_e << -sL_ * cLam, -sLam, -cL_ * cLam, -sL_ * sLam, cLam, -cL_ * sLam, cL_, 0.0, -sL_;
+  //   C_e_l = C_l_e.transpose();
+  //   t = 1.0 - navtools::WGS84_E2<> * sLsq_;
+  //   sqt = std::sqrt(t);
+  //   Re_ = navtools::WGS84_R0<> / sqt;
+  //   Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+  //   He_ = Re_ + alt;
+  //   Hn_ = Rn_ + alt;
+  //   ecef_p << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + alt) * sL_;
+  //   ecef_v << veln, vele, veld;
+  //   ecef_v = C_l_e * ecef_v;
+
+  //   // iterate
+  //   for (int i = 0; i < N; i++) {
+  //     RangeAndRate(
+  //         ecef_p, ecef_v, clkb, clkd, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr,
+  //         pred_psrdot);
+  //     u = -C_e_l * u;
+  //     udot = -C_e_l * udot;
+  //     H(i, 0) = u(0);
+  //     H(i, 1) = u(1);
+  //     H(i, 2) = u(2);
+  //     H(N + i, 0) = udot(0);
+  //     H(N + i, 1) = udot(1);
+  //     H(N + i, 2) = udot(2);
+  //     H(N + i, 3) = u(0);
+  //     H(N + i, 4) = u(1);
+  //     H(N + i, 5) = u(2);
+  //     dy(i) = psr(i) - pred_psr;
+  //     dy(N + i) = psrdot(i) - pred_psrdot;
+  //   }
+
+  //   // iterative corrections
+  //   PHt = P_ * H.transpose();
+  //   K = PHt * (H * PHt + R).inverse();
+  //   delta = K * (H * x_k + dy) - x_k;  // x_ is zero
+  //   x_k += delta;
+
+  //   // Closed loop error corrections
+  //   lat = phi_ - x_k(0) / Hn_;
+  //   lon = lam_ - x_k(1) / (He_ * cL_);
+  //   alt = h_ + x_k(2);
+  //   veln = vn_ - x_k(3);
+  //   vele = ve_ - x_k(4);
+  //   veld = vd_ - x_k(5);
+  //   clkb = cb_ + x_k(6);
+  //   clkd = cd_ + x_k(7);
+
+  //   if (delta.squaredNorm() < 1e-10) break;
+  // }
+
+  // // finish Kalman update
+  // Eigen::MatrixXd L = I8_ - K * H;
+  // P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  // x_.setZero();
+  // phi_ = lat;
+  // lam_ = lon;
+  // h_ = alt;
+  // vn_ = veln;
+  // ve_ = vele;
+  // vd_ = veld;
+  // cb_ = clkb;
+  // cd_ = clkd;
+
+  //! Regular EKF
   // Functions of current position
   double sLam = std::sin(lam_);
   double cLam = std::cos(lam_);
   sL_ = std::sin(phi_);
   cL_ = std::cos(phi_);
+  sLsq_ = sL_ * sL_;
   Eigen::Matrix3d C_l_e{
       {-sL_ * cLam, -sLam, -cL_ * cLam}, {-sL_ * sLam, cLam, -cL_ * sLam}, {cL_, 0.0, -sL_}};
   Eigen::Matrix3d C_e_l = C_l_e.transpose();
@@ -194,13 +309,13 @@ void Kns::GnssUpdate(
 
   // Generate observation predictions
   Eigen::Vector3d u, udot;
-  Eigen::Vector3d ecef_p{He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_};
-  Eigen::Vector3d ecef_v{vn_, ve_, vd_};
-  ecef_v = C_l_e * ecef_v;
+  ecef_p_ << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_;
+  ecef_v_ << vn_, ve_, vd_;
+  ecef_v_ = C_l_e * ecef_v_;
   double pred_psr, pred_psrdot;
   for (int i = 0; i < N; i++) {
     RangeAndRate(
-        ecef_p, ecef_v, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
+        ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
     u = -C_e_l * u;
     udot = -C_e_l * udot;
     H(i, 0) = u(0);
@@ -216,14 +331,39 @@ void Kns::GnssUpdate(
     dy(N + i) = psrdot(i) - pred_psrdot;
   }
 
-  // TODO: innovation filter
-
-  // === Kalman Update ===
+  // innovation filter
   Eigen::MatrixXd PHt = P_ * H.transpose();
-  Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
-  Eigen::MatrixXd L = I8_ - K * H;
-  P_ = L * P_ * L.transpose() + K * R * K.transpose();
-  x_ += K * dy;
+  Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
+  Eigen::VectorX<bool> mask = (dy.array() / sqrt_S.array()) < 3.0;
+  const int new_M = (mask).count();
+  if (new_M < M) {
+    Eigen::MatrixXd new_H(new_M, 8);
+    Eigen::MatrixXd new_R(new_M, new_M);
+    Eigen::VectorXd new_dy(new_M);
+    int k = 0;
+    for (int i = 0; i < M; i++) {
+      if (mask(i)) {
+        new_H.row(k) = H.row(i);
+        new_R(k, k) = R(i, i);
+        new_dy(k) = dy(i);
+        k++;
+      }
+    }
+
+    // === Kalman Update ===
+    Eigen::MatrixXd PHt = P_ * new_H.transpose();
+    Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+    Eigen::MatrixXd L = I8_ - K * new_H;
+    P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+    x_ += K * new_dy;
+  } else {
+    // === Kalman Update ===
+    Eigen::MatrixXd PHt = P_ * H.transpose();
+    Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
+    Eigen::MatrixXd L = I8_ - K * H;
+    P_ = L * P_ * L.transpose() + K * R * K.transpose();
+    x_ += K * dy;
+  }
 
   // Closed loop error corrections
   phi_ -= x_(0) / Hn_;

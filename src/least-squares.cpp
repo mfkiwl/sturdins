@@ -111,7 +111,7 @@ bool GaussNewton(
     P = (Ht * W * H).inverse();
     dx = P * Ht * W * dy;
     x += dx;
-    if ((dx(0) * dx(0) + dx(1) * dx(1) + dx(2) * dx(2)) < 1e-3) {
+    if (dx.squaredNorm() < 1e-6) {
       return true;
     }
   }

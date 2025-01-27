@@ -90,6 +90,12 @@ class Kns {
    * @param dt  Integration time [s]
    */
   void Propagate(const double &dt);
+  void FalsePropagateState(
+      Eigen::Ref<Eigen::Vector3d> ecef_p,
+      Eigen::Ref<Eigen::Vector3d> ecef_v,
+      double &cb,
+      double &cd,
+      const double &dt);
 
   /**
    * *=== GnssUpdate ===*
@@ -120,6 +126,8 @@ class Kns {
   double vd_;   // Down velocity [m/s]
   double cb_;   // clock bias [m]
   double cd_;   // clock drift [m/s]
+  Eigen::Vector3d ecef_p_;
+  Eigen::Vector3d ecef_v_;
 
  private:
   /**
