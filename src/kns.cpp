@@ -173,9 +173,9 @@ void Kns::FalsePropagateState(
   double t = 1.0 - navtools::WGS84_E2<> * sLsq_;
   double sqt = std::sqrt(t);
   Re_ = navtools::WGS84_R0<> / sqt;
-  Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+  // Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
   He_ = Re_ + h_;
-  Hn_ = Rn_ + h_;
+  // Hn_ = Rn_ + h_;
   ecef_p_ << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_;
   ecef_v_ << vn_, ve_, vd_;
   ecef_v_ = C_l_e * ecef_v_;
@@ -334,28 +334,30 @@ void Kns::GnssUpdate(
   // innovation filter
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
-  Eigen::VectorX<bool> mask = (dy.array() / sqrt_S.array()) < 3.0;
+  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
   const int new_M = (mask).count();
   if (new_M < M) {
-    Eigen::MatrixXd new_H(new_M, 8);
-    Eigen::MatrixXd new_R(new_M, new_M);
-    Eigen::VectorXd new_dy(new_M);
-    int k = 0;
-    for (int i = 0; i < M; i++) {
-      if (mask(i)) {
-        new_H.row(k) = H.row(i);
-        new_R(k, k) = R(i, i);
-        new_dy(k) = dy(i);
-        k++;
+    if (new_M > 0) {
+      Eigen::MatrixXd new_H(new_M, 8);
+      Eigen::MatrixXd new_R(new_M, new_M);
+      Eigen::VectorXd new_dy(new_M);
+      int k = 0;
+      for (int i = 0; i < M; i++) {
+        if (mask(i)) {
+          new_H.row(k) = H.row(i);
+          new_R(k, k) = R(i, i);
+          new_dy(k) = dy(i);
+          k++;
+        }
       }
-    }
 
-    // === Kalman Update ===
-    Eigen::MatrixXd PHt = P_ * new_H.transpose();
-    Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
-    Eigen::MatrixXd L = I8_ - K * new_H;
-    P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
-    x_ += K * new_dy;
+      // === Kalman Update ===
+      Eigen::MatrixXd PHt = P_ * new_H.transpose();
+      Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+      Eigen::MatrixXd L = I8_ - K * new_H;
+      P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+      x_ += K * new_dy;
+    }
   } else {
     // === Kalman Update ===
     Eigen::MatrixXd PHt = P_ * H.transpose();

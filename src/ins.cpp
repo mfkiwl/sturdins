@@ -414,7 +414,7 @@ void Ins::GnssUpdate(
   // innovation filter
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
-  Eigen::VectorX<bool> mask = (dy.array() / sqrt_S.array()) < 3.0;
+  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
   const int new_M = (mask).count();
   if (new_M < M) {
     Eigen::MatrixXd new_H(new_M, 8);
