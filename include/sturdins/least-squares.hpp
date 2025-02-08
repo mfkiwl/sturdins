@@ -48,7 +48,7 @@ void RangeAndRate(
     double &pred_psrdot);
 
 /**
- * *=== GaussNewton ===*
+ * *=== GnssPVT ===*
  * @brief Least Squares solver for GNSS position, velocity, and timing terms
  * @param x           Initial state estimate
  * @param P           Initial covariance estimate
@@ -59,7 +59,7 @@ void RangeAndRate(
  * @param psr_var     Pseudorange measurement variance [m^2]
  * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
  */
-bool GaussNewton(
+bool GnssPVT(
     Eigen::Ref<Eigen::VectorXd> x,
     Eigen::Ref<Eigen::MatrixXd> P,
     const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
@@ -68,6 +68,38 @@ bool GaussNewton(
     const Eigen::Ref<const Eigen::VectorXd> &psrdot,
     const Eigen::Ref<const Eigen::VectorXd> &psr_var,
     const Eigen::Ref<const Eigen::VectorXd> &psrdot_var);
+
+/**
+ * *=== Wahba ===*
+ * @brief Solves Wahba's problem using least squares
+ * @param C_b_l      Attitude DCM estimate (body to local-nav)
+ * @param u_body     Measured unit vectors in the body frame
+ * @param u_ned      Ephemeris based unit vectors in the local-nav frame
+ * @param u_body_var Variance of the measured unit vectors
+ */
+void Wahba(
+    Eigen::Ref<Eigen::Matrix3d> C_b_l,
+    const Eigen::Ref<const Eigen::MatrixXd> &u_body,
+    const Eigen::Ref<const Eigen::MatrixXd> &u_ned,
+    const Eigen::Ref<const Eigen::VectorXd> &u_body_var);
+
+/**
+ * *=== MUSIC ===*
+ * @brief MUSIC estimator using Prompt correlators (I & Q)
+ * @param az        Azimuth estimates [rad]
+ * @param el        Elevation estimates [rad]
+ * @param P         Measured prompt correlators
+ * @param thresh    Desired threshold of convergence
+ */
+void MUSIC(
+    double &az_mean,
+    double &el_mean,
+    const Eigen::Ref<const Eigen::VectorXcd> &P,
+    const Eigen::Ref<const Eigen::MatrixXd> &ant_xyz,
+    const int &n_ant,
+    const double &lambda,
+    const double &thresh = 1e-4);
+
 }  // namespace sturdins
 
 #endif

@@ -13,10 +13,10 @@
 
 #include "sturdins/kns.hpp"
 
-#include <Eigen/src/Core/Matrix.h>
-
 #include <iostream>
+#include <navtools/attitude.hpp>
 #include <navtools/constants.hpp>
+#include <navtools/math.hpp>
 
 #include "sturdins/least-squares.hpp"
 
@@ -24,13 +24,13 @@ namespace sturdins {
 
 // *=== Kns ===*
 Kns::Kns()
-    : x_{Eigen::Vector<double, 8>::Zero()},
-      P_{Eigen::Matrix<double, 8, 8>::Zero()},
-      F_{Eigen::Matrix<double, 8, 8>::Identity()},
-      Q_{Eigen::Matrix<double, 8, 8>::Zero()},
-      I8_{Eigen::Matrix<double, 8, 8>::Identity()},
+    : x_{Eigen::Vector<double, 11>::Zero()},
+      P_{Eigen::Matrix<double, 11, 11>::Zero()},
+      F_{Eigen::Matrix<double, 11, 11>::Identity()},
+      Q_{Eigen::Matrix<double, 11, 11>::Zero()},
+      I11_{Eigen::Matrix<double, 11, 11>::Identity()},
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
-  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 3.0, 0.1;
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
 }
 Kns::Kns(
     const double lat,
@@ -49,12 +49,12 @@ Kns::Kns(
       vd_{veld},
       cb_{cb},
       cd_{cd},
-      x_{Eigen::Vector<double, 8>::Zero()},
-      P_{Eigen::Matrix<double, 8, 8>::Zero()},
-      F_{Eigen::Matrix<double, 8, 8>::Identity()},
-      Q_{Eigen::Matrix<double, 8, 8>::Zero()},
-      I8_{Eigen::Matrix<double, 8, 8>::Identity()} {
-  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 3.0, 0.1;
+      x_{Eigen::Vector<double, 11>::Zero()},
+      P_{Eigen::Matrix<double, 11, 11>::Zero()},
+      F_{Eigen::Matrix<double, 11, 11>::Identity()},
+      Q_{Eigen::Matrix<double, 11, 11>::Zero()},
+      I11_{Eigen::Matrix<double, 11, 11>::Identity()} {
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
 }
 
 // *=== SetPosition ===*
@@ -69,6 +69,13 @@ void Kns::SetVelocity(const double &veln, const double &vele, const double &veld
   vn_ = veln;
   ve_ = vele;
   vd_ = veld;
+}
+
+// *=== SetAttitude ===*
+void Kns::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
+  Eigen::Vector3d euler{roll, pitch, yaw};
+  navtools::euler2dcm<true, double>(C_b_l_, euler);
+  navtools::euler2quat<true, double>(q_b_l_, euler);
 }
 
 // *=== SetClock ===*
@@ -86,10 +93,11 @@ void Kns::SetClockSpec(const double &h0, const double &h1, const double &h2) {
 }
 
 // *=== SetProcessNoise ===*
-void Kns::SetProcessNoise(const double &Sa) {
-  Sa_ = Sa;
-  halfSa_ = Sa_ / 2.0;
-  thirdSa_ = Sa_ / 3.0;
+void Kns::SetProcessNoise(const double &Svel, const double &Satt) {
+  Sv_ = Svel;
+  halfSv_ = Sv_ / 2.0;
+  thirdSv_ = Sv_ / 3.0;
+  Sa_ = Satt;
 }
 
 // *=== Propagate ===*
@@ -97,44 +105,51 @@ void Kns::Propagate(const double &dt) {
   /**
    * @brief First order F/Phi matrix Groves Ch.9
    * --                      --
-   * |  I3   I3*T   Z31   Z31 |
-   * |  Z3    I3    Z31   Z31 |
-   * | Z13   Z13     1     T  |
-   * | Z13   Z13     0     1  |
+   * |  I3   I3*T   Z33   Z31   Z31 |
+   * |  Z3    I3    Z33   Z31   Z31 |
+   * |  Z3    Z3     I3   Z31   Z31 |
+   * | Z13   Z13    Z33    1     T  |
+   * | Z13   Z13    Z33    0     1  |
    * --                      --
    */
   F_(0, 3) = dt;
   F_(1, 4) = dt;
   F_(2, 5) = dt;
-  F_(6, 7) = dt;
+  F_(9, 10) = dt;
 
   /**
    * @brief Process noise matrix Groves Ch.9
-   * --                     --
-   * | Sa/3*T^3*I3   Sa/2*T^2*I3         Z31           Z31    |
-   * | Sa/2*T^2*I3     Sa*T*I3           Z31           Z31    |
-   * |     Z13           Z13       Sp*T + Sf/3*T^3   Sf/2*T^2 |
-   * |     Z13           Z13           Sf/2*T^2        Sf*T   |
-   * --                     --
+   * --                                                                --
+   * | Sv/3*T^3*I3   Sv/2*T^2*I3      Z3           Z31           Z31    |
+   * | Sv/2*T^2*I3     Sv*T*I3        Z3           Z31           Z31    |
+   * |      Z3            Z3       Sa*T*I3         Z33           Z33    |
+   * |     Z13           Z13          Z3     Sp*T + Sf/3*T^3   Sf/2*T^2 |
+   * |     Z13           Z13          Z3         Sf/2*T^2        Sf*T   |
+   * --                                                                --
    */
   double dtsq = dt * dt;
   double dtcb = dtsq * dt;
-  Q_(0, 0) = 0.5 * thirdSa_ * dtcb;
+  Q_(0, 0) = 0.5 * thirdSv_ * dtcb;
   Q_(1, 1) = Q_(0, 0);
   Q_(2, 2) = Q_(0, 0);
-  Q_(0, 3) = 0.5 * halfSa_ * dtsq;
+  Q_(0, 3) = 0.5 * halfSv_ * dtsq;
   Q_(1, 4) = Q_(0, 3);
   Q_(2, 5) = Q_(0, 3);
   Q_(3, 0) = Q_(0, 3);
   Q_(4, 1) = Q_(0, 3);
   Q_(5, 2) = Q_(0, 3);
-  Q_(3, 3) = 0.5 * Sa_ * dt;
+  Q_(3, 3) = 0.5 * Sv_ * dt;
   Q_(4, 4) = Q_(3, 3);
   Q_(5, 5) = Q_(3, 3);
-  Q_(6, 6) = 0.5 * ((h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb));
-  Q_(6, 7) = 0.5 * ((h1_ * dt) + (h2_ * dtsq));
-  Q_(7, 6) = Q_(6, 7);
-  Q_(7, 7) = 0.5 * ((h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt));
+
+  Q_(6, 6) = 0.5 * Sa_ * dt;
+  Q_(7, 7) = Q_(6, 6);
+  Q_(8, 8) = Q_(6, 6);
+
+  Q_(9, 9) = 0.5 * ((h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb));
+  Q_(9, 10) = 0.5 * ((h1_ * dt) + (h2_ * dtsq));
+  Q_(10, 9) = Q_(9, 10);
+  Q_(10, 10) = 0.5 * ((h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt));
 
   // Functions of latitude
   sL_ = std::sin(phi_);
@@ -199,94 +214,13 @@ void Kns::GnssUpdate(
   const int N = psr.size();
   const int M = 2 * N;
   Eigen::VectorXd dy(M);
-  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(M, 8);
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(M, 11);
   for (int i = 0; i < N; i++) {
-    H(i, 6) = 1.0;
-    H(N + i, 7) = 1.0;
+    H(i, 9) = 1.0;
+    H(N + i, 10) = 1.0;
   }
   Eigen::MatrixXd R = Eigen::MatrixXd::Zero(M, M);
   R.diagonal() << psr_var, psrdot_var;
-
-  // //! Iterative EKF
-  // Eigen::Vector3d u, udot;
-  // Eigen::Vector3d ecef_p, ecef_v;
-  // double pred_psr, pred_psrdot, cLam, sLam, t, sqt;
-  // double lat = phi_, lon = lam_, alt = h_, veln = vn_, vele = ve_, veld = vd_, clkb = cb_,
-  //        clkd = cd_;
-  // Eigen::Matrix3d C_l_e, C_e_l;
-  // Eigen::MatrixXd PHt(8, M), K(8, M);
-  // Eigen::VectorXd x_k = x_;
-  // Eigen::VectorXd delta(8);
-  // for (int k = 0; k < 10; k++) {
-  //   // update user position
-  //   sLam = std::sin(lon);
-  //   cLam = std::cos(lon);
-  //   sL_ = std::sin(lat);
-  //   cL_ = std::cos(lat);
-  //   sLsq_ = sL_ * sL_;
-  //   C_l_e << -sL_ * cLam, -sLam, -cL_ * cLam, -sL_ * sLam, cLam, -cL_ * sLam, cL_, 0.0, -sL_;
-  //   C_e_l = C_l_e.transpose();
-  //   t = 1.0 - navtools::WGS84_E2<> * sLsq_;
-  //   sqt = std::sqrt(t);
-  //   Re_ = navtools::WGS84_R0<> / sqt;
-  //   Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
-  //   He_ = Re_ + alt;
-  //   Hn_ = Rn_ + alt;
-  //   ecef_p << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + alt) * sL_;
-  //   ecef_v << veln, vele, veld;
-  //   ecef_v = C_l_e * ecef_v;
-
-  //   // iterate
-  //   for (int i = 0; i < N; i++) {
-  //     RangeAndRate(
-  //         ecef_p, ecef_v, clkb, clkd, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr,
-  //         pred_psrdot);
-  //     u = -C_e_l * u;
-  //     udot = -C_e_l * udot;
-  //     H(i, 0) = u(0);
-  //     H(i, 1) = u(1);
-  //     H(i, 2) = u(2);
-  //     H(N + i, 0) = udot(0);
-  //     H(N + i, 1) = udot(1);
-  //     H(N + i, 2) = udot(2);
-  //     H(N + i, 3) = u(0);
-  //     H(N + i, 4) = u(1);
-  //     H(N + i, 5) = u(2);
-  //     dy(i) = psr(i) - pred_psr;
-  //     dy(N + i) = psrdot(i) - pred_psrdot;
-  //   }
-
-  //   // iterative corrections
-  //   PHt = P_ * H.transpose();
-  //   K = PHt * (H * PHt + R).inverse();
-  //   delta = K * (H * x_k + dy) - x_k;  // x_ is zero
-  //   x_k += delta;
-
-  //   // Closed loop error corrections
-  //   lat = phi_ - x_k(0) / Hn_;
-  //   lon = lam_ - x_k(1) / (He_ * cL_);
-  //   alt = h_ + x_k(2);
-  //   veln = vn_ - x_k(3);
-  //   vele = ve_ - x_k(4);
-  //   veld = vd_ - x_k(5);
-  //   clkb = cb_ + x_k(6);
-  //   clkd = cd_ + x_k(7);
-
-  //   if (delta.squaredNorm() < 1e-10) break;
-  // }
-
-  // // finish Kalman update
-  // Eigen::MatrixXd L = I8_ - K * H;
-  // P_ = L * P_ * L.transpose() + K * R * K.transpose();
-  // x_.setZero();
-  // phi_ = lat;
-  // lam_ = lon;
-  // h_ = alt;
-  // vn_ = veln;
-  // ve_ = vele;
-  // vd_ = veld;
-  // cb_ = clkb;
-  // cd_ = clkd;
 
   //! Regular EKF
   // Functions of current position
@@ -354,7 +288,7 @@ void Kns::GnssUpdate(
       // === Kalman Update ===
       Eigen::MatrixXd PHt = P_ * new_H.transpose();
       Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
-      Eigen::MatrixXd L = I8_ - K * new_H;
+      Eigen::MatrixXd L = I11_ - K * new_H;
       P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
       x_ += K * new_dy;
     }
@@ -362,7 +296,7 @@ void Kns::GnssUpdate(
     // === Kalman Update ===
     Eigen::MatrixXd PHt = P_ * H.transpose();
     Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
-    Eigen::MatrixXd L = I8_ - K * H;
+    Eigen::MatrixXd L = I11_ - K * H;
     P_ = L * P_ * L.transpose() + K * R * K.transpose();
     x_ += K * dy;
   }
@@ -374,9 +308,93 @@ void Kns::GnssUpdate(
   vn_ -= x_(3);
   ve_ -= x_(4);
   vd_ -= x_(5);
-  cb_ += x_(6);
-  cd_ += x_(7);
+  Eigen::Vector4d q_err{1.0, -0.5 * x_(6), -0.5 * x_(7), -0.5 * x_(8)};
+  q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
+  cb_ += x_(9);
+  cd_ += x_(10);
   x_.setZero();
 }
+
+// //! Iterative EKF
+// Eigen::Vector3d u, udot;
+// Eigen::Vector3d ecef_p, ecef_v;
+// double pred_psr, pred_psrdot, cLam, sLam, t, sqt;
+// double lat = phi_, lon = lam_, alt = h_, veln = vn_, vele = ve_, veld = vd_, clkb = cb_,
+//        clkd = cd_;
+// Eigen::Matrix3d C_l_e, C_e_l;
+// Eigen::MatrixXd PHt(8, M), K(8, M);
+// Eigen::VectorXd x_k = x_;
+// Eigen::VectorXd delta(8);
+// for (int k = 0; k < 10; k++) {
+//   // update user position
+//   sLam = std::sin(lon);
+//   cLam = std::cos(lon);
+//   sL_ = std::sin(lat);
+//   cL_ = std::cos(lat);
+//   sLsq_ = sL_ * sL_;
+//   C_l_e << -sL_ * cLam, -sLam, -cL_ * cLam, -sL_ * sLam, cLam, -cL_ * sLam, cL_, 0.0, -sL_;
+//   C_e_l = C_l_e.transpose();
+//   t = 1.0 - navtools::WGS84_E2<> * sLsq_;
+//   sqt = std::sqrt(t);
+//   Re_ = navtools::WGS84_R0<> / sqt;
+//   Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+//   He_ = Re_ + alt;
+//   Hn_ = Rn_ + alt;
+//   ecef_p << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + alt) * sL_;
+//   ecef_v << veln, vele, veld;
+//   ecef_v = C_l_e * ecef_v;
+
+//   // iterate
+//   for (int i = 0; i < N; i++) {
+//     RangeAndRate(
+//         ecef_p, ecef_v, clkb, clkd, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr,
+//         pred_psrdot);
+//     u = -C_e_l * u;
+//     udot = -C_e_l * udot;
+//     H(i, 0) = u(0);
+//     H(i, 1) = u(1);
+//     H(i, 2) = u(2);
+//     H(N + i, 0) = udot(0);
+//     H(N + i, 1) = udot(1);
+//     H(N + i, 2) = udot(2);
+//     H(N + i, 3) = u(0);
+//     H(N + i, 4) = u(1);
+//     H(N + i, 5) = u(2);
+//     dy(i) = psr(i) - pred_psr;
+//     dy(N + i) = psrdot(i) - pred_psrdot;
+//   }
+
+//   // iterative corrections
+//   PHt = P_ * H.transpose();
+//   K = PHt * (H * PHt + R).inverse();
+//   delta = K * (H * x_k + dy) - x_k;  // x_ is zero
+//   x_k += delta;
+
+//   // Closed loop error corrections
+//   lat = phi_ - x_k(0) / Hn_;
+//   lon = lam_ - x_k(1) / (He_ * cL_);
+//   alt = h_ + x_k(2);
+//   veln = vn_ - x_k(3);
+//   vele = ve_ - x_k(4);
+//   veld = vd_ - x_k(5);
+//   clkb = cb_ + x_k(6);
+//   clkd = cd_ + x_k(7);
+
+//   if (delta.squaredNorm() < 1e-10) break;
+// }
+
+// // finish Kalman update
+// Eigen::MatrixXd L = I8_ - K * H;
+// P_ = L * P_ * L.transpose() + K * R * K.transpose();
+// x_.setZero();
+// phi_ = lat;
+// lam_ = lon;
+// h_ = alt;
+// vn_ = veln;
+// ve_ = vele;
+// vd_ = veld;
+// cb_ = clkb;
+// cd_ = clkd;
 
 }  // namespace sturdins

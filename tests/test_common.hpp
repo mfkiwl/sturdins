@@ -91,20 +91,20 @@ std::vector<satutils::KeplerEphem<T>> ParseEphemeris(std::string filename) {
   std::vector<satutils::KeplerEphem<T>> eph;
   satutils::KeplerElements<T> elem;
   while (fid.read(reinterpret_cast<char *>(&elem), sizeof(elem))) {
-    std::cout << "Next ephemerides: ";
-    std::cout << "\n\tiode     : " << elem.iode << "\n\tiodc     : " << elem.iodc
-              << "\n\ttoe      : " << elem.toe << "\n\ttoc      : " << elem.toc
-              << "\n\ttgd      : " << elem.tgd << "\n\toaf2     : " << elem.af2
-              << "\n\taf1      : " << elem.af1 << "\n\taf0      : " << elem.af0
-              << "\n\te        : " << elem.e << "\n\tsqrtA    : " << elem.sqrtA
-              << "\n\tdeltan   : " << elem.deltan << "\n\tm0       : " << elem.m0
-              << "\n\tomega0   : " << elem.omega0 << "\n\tomega    : " << elem.omega
-              << "\n\tomegaDot : " << elem.omegaDot << "\n\ti0       : " << elem.i0
-              << "\n\tiDot     : " << elem.iDot << "\n\tcuc      : " << elem.cuc
-              << "\n\tcus      : " << elem.cus << "\n\tcic      : " << elem.cic
-              << "\n\tcis      : " << elem.cis << "\n\tcrc      : " << elem.crc
-              << "\n\tcrs      : " << elem.crs << "\n\tura      : " << elem.ura
-              << "\n\thealth   : " << elem.health << "\n\n";
+    // std::cout << "Next ephemerides: ";
+    // std::cout << "\n\tiode     : " << elem.iode << "\n\tiodc     : " << elem.iodc
+    //           << "\n\ttoe      : " << elem.toe << "\n\ttoc      : " << elem.toc
+    //           << "\n\ttgd      : " << elem.tgd << "\n\toaf2     : " << elem.af2
+    //           << "\n\taf1      : " << elem.af1 << "\n\taf0      : " << elem.af0
+    //           << "\n\te        : " << elem.e << "\n\tsqrtA    : " << elem.sqrtA
+    //           << "\n\tdeltan   : " << elem.deltan << "\n\tm0       : " << elem.m0
+    //           << "\n\tomega0   : " << elem.omega0 << "\n\tomega    : " << elem.omega
+    //           << "\n\tomegaDot : " << elem.omegaDot << "\n\ti0       : " << elem.i0
+    //           << "\n\tiDot     : " << elem.iDot << "\n\tcuc      : " << elem.cuc
+    //           << "\n\tcus      : " << elem.cus << "\n\tcic      : " << elem.cic
+    //           << "\n\tcis      : " << elem.cis << "\n\tcrc      : " << elem.crc
+    //           << "\n\tcrs      : " << elem.crs << "\n\tura      : " << elem.ura
+    //           << "\n\thealth   : " << elem.health << "\n\n";
     eph.push_back(satutils::KeplerEphem<T>(elem));
   }
   fid.close();

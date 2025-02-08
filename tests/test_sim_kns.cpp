@@ -73,12 +73,12 @@ int main() {
         filt.SetVelocity(truth.vn, truth.ve, truth.vd);
         filt.SetClock(clock_sim_state(0), clock_sim_state(1));
         filt.SetClockSpec(h0, h1, h2);
-        filt.SetProcessNoise(10.0);
+        filt.SetProcessNoise(10.0, 1.0);
 
         // initialize with LS
         Eigen::VectorXd x{Eigen::Vector<double, 8>::Zero()};
         Eigen::MatrixXd P{Eigen::Matrix<double, 8, 8>::Zero()};
-        sturdins::GaussNewton(
+        sturdins::GnssPVT(
             x, P, meas.sv_pos, meas.sv_vel, meas.psr, meas.psrdot, psr_var, psrdot_var);
         Eigen::Vector3d xyz = x.segment(0, 3);
         navtools::ecef2lla<double>(lla, xyz);

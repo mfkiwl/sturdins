@@ -13,6 +13,9 @@
 
 #include "sturdins/least-squares.hpp"
 
+// #include <Eigen/Eigenvalues>
+#include <complex>
+#include <iostream>
 #include <navtools/constants.hpp>
 
 namespace sturdins {
@@ -51,8 +54,8 @@ void RangeAndRate(
   pred_psrdot = u.dot(dv) + cd;
 }
 
-// *=== GaussNewton ===*
-bool GaussNewton(
+// *=== GnssPVT ===*
+bool GnssPVT(
     Eigen::Ref<Eigen::VectorXd> x,
     Eigen::Ref<Eigen::MatrixXd> P,
     const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
@@ -118,6 +121,97 @@ bool GaussNewton(
 
   // failed to converge in time!
   return false;
+}
+
+// *=== Wahba ===*
+void Wahba(
+    Eigen::Ref<Eigen::Matrix3d> C_b_l,
+    const Eigen::Ref<const Eigen::MatrixXd> &u_body,
+    const Eigen::Ref<const Eigen::MatrixXd> &u_ned,
+    const Eigen::Ref<const Eigen::VectorXd> &u_body_var) {
+  const int N = u_body.cols();
+  Eigen::MatrixXd R(N, N);
+  R.diagonal() << 1.0 / u_body_var.array();
+  Eigen::MatrixXd u_ned_T = u_ned.transpose();
+  C_b_l = u_body * R * u_ned_T * (u_ned * R * u_ned_T).inverse();
+}
+
+// *=== MUSIC ===*
+void MUSIC(
+    double &az_mean,
+    double &el_mean,
+    const Eigen::Ref<const Eigen::VectorXcd> &P,
+    const Eigen::Ref<const Eigen::MatrixXd> &ant_xyz,
+    const int &n_ant,
+    const double &lambda,
+    const double &thresh) {
+  // 1) calculate correlation/covariance
+  Eigen::MatrixXcd S = P * P.adjoint();
+
+  // 2) calculate eigen-structure of S
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> eigen_solver(S, true);
+  Eigen::VectorXcd e = eigen_solver.eigenvalues();
+  Eigen::MatrixXcd v = eigen_solver.eigenvectors();
+
+  // 3) determine number of incident signals
+  Eigen::VectorX<bool> idx = (e.array().abs()) < 1.0;
+  const int N = idx.count();
+  // const int D = n_ant - N
+  Eigen::MatrixXcd U(n_ant, N);
+  for (int i = 0; i < n_ant; i++) {
+    if (idx(i)) {
+      U.col(i) = v.col(i);
+    }
+  }
+
+  // 4) Find max power given arrival angles
+  double az_span = navtools::DEG2RAD<> * 180.0;
+  double el_span = navtools::DEG2RAD<> * 90.0;
+  double res = navtools::DEG2RAD<> * 10.0;
+  az_mean = 0.0;
+  el_mean = 0.0;
+  Eigen::VectorXcd tmp(n_ant);
+  Eigen::Vector3d u;
+  double sin_az, cos_az, sin_el, cos_el;
+  int max_az_idx, max_el_idx;
+  std::complex<double> xyz2phase = navtools::COMPLEX_I<> * navtools::TWO_PI<> / lambda;
+  while (res >= thresh) {
+    Eigen::VectorXd az{Eigen::VectorXd::LinSpaced(
+        2 * static_cast<int>(az_span / res) + 1, az_mean - az_span, az_mean + az_span)};
+    Eigen::VectorXd el{Eigen::VectorXd::LinSpaced(
+        2 * static_cast<int>(el_span / res) + 1, el_mean - el_span, el_mean + el_span)};
+    Eigen::MatrixXd P_music(az.size(), el.size());
+
+    for (int i = 0; i < az.size(); i++) {
+      // loop through azimuths
+      sin_az = std::sin(az(i));
+      cos_az = std::cos(az(i));
+
+      for (int j = 0; j < el.size(); j++) {
+        // loop through elevations
+        sin_el = std::sin(el(j));
+        cos_el = std::cos(el(j));
+
+        // calculate spatial phase
+        u << cos_az * cos_el, sin_az * cos_el, -sin_el;
+        for (int k = 0; k < n_ant; k++) {
+          tmp(k) = std::exp(xyz2phase * u.dot(ant_xyz.col(k)));
+        }
+
+        // determine power based on input az & el
+        P_music(i, j) =
+            1.0 / std::abs((tmp.conjugate().transpose() * U * U.conjugate().transpose() * tmp)(0));
+      }
+    }
+
+    // find peak, recenter, and increase resolution
+    P_music.maxCoeff(&max_az_idx, &max_el_idx);
+    az_mean = az(max_az_idx);
+    el_mean = el(max_el_idx);
+    az_span = res / 2.0;
+    el_span = res / 2.0;
+    res /= 10.0;
+  }
 }
 
 }  // namespace sturdins

@@ -61,6 +61,15 @@ class Kns {
   void SetVelocity(const double &veln, const double &vele, const double &veld);
 
   /**
+   * *=== SetAttitude ===*
+   * @brief Set the attitude of the INS system
+   * @param roll   Roll [rad]
+   * @param pitch  Pitch [rad]
+   * @param yaw    Yaw (heading) [rad]
+   */
+  void SetAttitude(const double &roll, const double &pitch, const double &yaw);
+
+  /**
    * *=== SetClock ===*
    * @brief Set the clock states of the INS system
    * @param cb    Clock bias [m]
@@ -80,9 +89,10 @@ class Kns {
   /**
    * * === SetProcessNoise ===
    * @brief Set the noise parameter of the Kinematic (constant velocity) model
-   * @param Sa
+   * @param Svel
+   * @param Satt
    */
-  void SetProcessNoise(const double &Sa);
+  void SetProcessNoise(const double &Svel, const double &Satt);
 
   /**
    * *=== Propagate ===*
@@ -128,6 +138,8 @@ class Kns {
   double cd_;   // clock drift [m/s]
   Eigen::Vector3d ecef_p_;
   Eigen::Vector3d ecef_v_;
+  Eigen::Vector4d q_b_l_;
+  Eigen::Matrix3d C_b_l_;
 
  private:
   /**
@@ -136,9 +148,10 @@ class Kns {
   double h0_;
   double h1_;
   double h2_;
+  double Sv_;
   double Sa_;
-  double halfSa_;
-  double thirdSa_;
+  double halfSv_;
+  double thirdSv_;
 
   /**
    * @brief Kalman Filter Matrices (these have constant size)
@@ -147,7 +160,7 @@ class Kns {
   Eigen::MatrixXd P_;  // error state covariance
   Eigen::MatrixXd F_;  // state transition matrix
   Eigen::MatrixXd Q_;  // process covariance matrix
-  Eigen::MatrixXd I8_;
+  Eigen::MatrixXd I11_;
 
   /**
    * @brief Functions of latitude
