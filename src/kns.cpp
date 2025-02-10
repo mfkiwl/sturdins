@@ -204,12 +204,12 @@ void Kns::FalsePropagateState(
 
 // *=== GnssUpdate ===*
 void Kns::GnssUpdate(
-    const Eigen::MatrixXd &sv_pos,
-    const Eigen::MatrixXd &sv_vel,
-    const Eigen::VectorXd &psr,
-    const Eigen::VectorXd &psrdot,
-    const Eigen::VectorXd &psr_var,
-    const Eigen::VectorXd &psrdot_var) {
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+    const Eigen::Ref<const Eigen::VectorXd> &psr,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+    const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot_var) {
   // Initialize
   const int N = psr.size();
   const int M = 2 * N;
@@ -271,6 +271,156 @@ void Kns::GnssUpdate(
   Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
   const int new_M = (mask).count();
   if (new_M < M) {
+    if (new_M > 0) {
+      Eigen::MatrixXd new_H(new_M, 8);
+      Eigen::MatrixXd new_R(new_M, new_M);
+      Eigen::VectorXd new_dy(new_M);
+      int k = 0;
+      for (int i = 0; i < M; i++) {
+        if (mask(i)) {
+          new_H.row(k) = H.row(i);
+          new_R(k, k) = R(i, i);
+          new_dy(k) = dy(i);
+          k++;
+        }
+      }
+
+      // === Kalman Update ===
+      Eigen::MatrixXd PHt = P_ * new_H.transpose();
+      Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+      Eigen::MatrixXd L = I11_ - K * new_H;
+      P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+      x_ += K * new_dy;
+    }
+  } else {
+    // === Kalman Update ===
+    Eigen::MatrixXd PHt = P_ * H.transpose();
+    Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
+    Eigen::MatrixXd L = I11_ - K * H;
+    P_ = L * P_ * L.transpose() + K * R * K.transpose();
+    x_ += K * dy;
+  }
+
+  // Closed loop error corrections
+  phi_ -= x_(0) / Hn_;
+  lam_ -= x_(1) / (He_ * cL_);
+  h_ += x_(2);
+  vn_ -= x_(3);
+  ve_ -= x_(4);
+  vd_ -= x_(5);
+  Eigen::Vector4d q_err{1.0, -0.5 * x_(6), -0.5 * x_(7), -0.5 * x_(8)};
+  q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
+  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
+  cb_ += x_(9);
+  cd_ += x_(10);
+  x_.setZero();
+}
+
+// *=== PhasedArrayUpdate ===*
+void Kns::PhasedArrayUpdate(
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+    const Eigen::Ref<const Eigen::VectorXd> &psr,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+    const Eigen::Ref<const Eigen::MatrixXd> &phase,
+    const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot_var,
+    const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+    const int &n_ant,
+    const double &lamb) {
+  // Initialize
+  const int N = psr.size();
+  const int M = 2 * N;
+  const int MM = M + (n_ant - 1) * N;
+  Eigen::VectorXd dy(M);
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(MM, 11);
+  for (int i = 0; i < N; i++) {
+    H(i, 9) = 1.0;
+    H(N + i, 10) = 1.0;
+  }
+
+  // measurement variance
+  int k1, k2;
+  Eigen::MatrixXd R = Eigen::MatrixXd::Zero(MM, MM);
+  for (int i = 0; i < N; i++) {
+    k1 = N + i;
+    R(i, i) = psr_var(i);
+    R(k1, k1) = psrdot_var(i);
+    for (int j = 1; j < n_ant; j++) {
+      k2 = M + (n_ant - 1) * i + j - 1;
+      R(k2, k2) = phase_var(j, i);
+    }
+  }
+
+  // Functions of current position
+  double sLam = std::sin(lam_);
+  double cLam = std::cos(lam_);
+  sL_ = std::sin(phi_);
+  cL_ = std::cos(phi_);
+  sLsq_ = sL_ * sL_;
+  Eigen::Matrix3d C_l_e{
+      {-sL_ * cLam, -sLam, -cL_ * cLam}, {-sL_ * sLam, cLam, -cL_ * sLam}, {cL_, 0.0, -sL_}};
+  Eigen::Matrix3d C_e_l = C_l_e.transpose();
+
+  // radii of curvature
+  double t = 1.0 - navtools::WGS84_E2<> * sLsq_;
+  double sqt = std::sqrt(t);
+  Re_ = navtools::WGS84_R0<> / sqt;
+  Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+  He_ = Re_ + h_;
+  Hn_ = Rn_ + h_;
+
+  // Generate observation predictions
+  Eigen::Vector3d u, udot, hp;
+  ecef_p_ << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_;
+  ecef_v_ << vn_, ve_, vd_;
+  ecef_v_ = C_l_e * ecef_v_;
+  double pred_psr, pred_psrdot, pred_phase;
+  Eigen::Matrix3Xd ant_ned = C_b_l_ * ant_xyz;
+  for (int i = 0; i < N; i++) {
+    RangeAndRate(
+        ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
+    u = C_e_l * u;
+    udot = C_e_l * udot;
+
+    for (int j = 1; j < n_ant; j++) {
+      k2 = M + (n_ant - 1) * i + j - 1;
+      pred_phase = (ant_ned.col(j).transpose() * u)(0) / lamb;
+      hp = (navtools::Skew<double>(ant_ned.col(j)).transpose() * u) / lamb;
+
+      H(k2, 6) = hp(0);
+      H(k2, 7) = hp(1);
+      H(k2, 8) = hp(2);
+      dy(k2) = phase(j, i) - pred_phase;
+      navtools::WrapPiToPi<double>(dy(k2));
+      // std::cout << "meas_phase(" << k2 << "): " << phase(j, i) << " | est_phase(" << k2
+      //           << "): " << pred_phase << " | dy(" << k2 << "): " << dy(k2) << "\n";
+    }
+
+    H(i, 0) = -u(0);
+    H(i, 1) = -u(1);
+    H(i, 2) = -u(2);
+    H(N + i, 0) = -udot(0);
+    H(N + i, 1) = -udot(1);
+    H(N + i, 2) = -udot(2);
+    H(N + i, 3) = -u(0);
+    H(N + i, 4) = -u(1);
+    H(N + i, 5) = -u(2);
+    dy(i) = psr(i) - pred_psr;
+    dy(N + i) = psrdot(i) - pred_psrdot;
+  }
+
+  // std::cout << "P: \n" << P_ << "\n";
+  // std::cout << "R: \n" << R << "\n";
+  // std::cout << "H: \n" << H << "\n";
+
+  // innovation filter
+  Eigen::MatrixXd PHt = P_ * H.transpose();
+  Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
+  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
+  const int new_M = (mask).count();
+  if (new_M < MM) {
     if (new_M > 0) {
       Eigen::MatrixXd new_H(new_M, 8);
       Eigen::MatrixXd new_R(new_M, new_M);

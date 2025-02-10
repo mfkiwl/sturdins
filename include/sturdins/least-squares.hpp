@@ -62,40 +62,65 @@ void RangeAndRate(
 bool GnssPVT(
     Eigen::Ref<Eigen::VectorXd> x,
     Eigen::Ref<Eigen::MatrixXd> P,
-    const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
-    const Eigen::Ref<const Eigen::MatrixXd> &sv_vel,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
     const Eigen::Ref<const Eigen::VectorXd> &psr,
     const Eigen::Ref<const Eigen::VectorXd> &psrdot,
     const Eigen::Ref<const Eigen::VectorXd> &psr_var,
     const Eigen::Ref<const Eigen::VectorXd> &psrdot_var);
 
 /**
+ * *=== PhasedArrayAttitude ===*
+ * @brief Iterative attitude estimate based on the known spatial phase of an antenna array
+ * @param C_b_l           Initial estimate of the body to local-nav frame attitude dcm
+ * @param u_ned           Ephemeris based unit vectors in the local-nav frame
+ * @param meas_phase      n_ant x n_sv matrix of measured differential gnss phase values
+ * @param meas_phase_var  Variance of each phase measurement
+ * @param ant_xyz         Known antenna positions in the body frame
+ * @param n_ant           Known number of antennas in the array
+ * @param lambda          Wavelength for the signal of interest [m/rad]
+ * @param thresh          Desired threshold of convergence
+ */
+bool PhasedArrayAttitude(
+    Eigen::Ref<Eigen::Matrix3d> C_b_l,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &u_ned,
+    const Eigen::Ref<const Eigen::MatrixXd> &meas_phase,
+    const Eigen::Ref<const Eigen::MatrixXd> &meas_phase_var,
+    const Eigen::Ref<const Eigen::MatrixXd> &ant_xyz,
+    const int &n_ant,
+    const double &lambda,
+    const double &thresh = 1e-6);
+
+/**
  * *=== Wahba ===*
  * @brief Solves Wahba's problem using least squares
- * @param C_b_l      Attitude DCM estimate (body to local-nav)
+ * @param C_b_l      Attitude DCM estimate (local-nav to body)
  * @param u_body     Measured unit vectors in the body frame
  * @param u_ned      Ephemeris based unit vectors in the local-nav frame
  * @param u_body_var Variance of the measured unit vectors
  */
 void Wahba(
     Eigen::Ref<Eigen::Matrix3d> C_b_l,
-    const Eigen::Ref<const Eigen::MatrixXd> &u_body,
-    const Eigen::Ref<const Eigen::MatrixXd> &u_ned,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &u_body,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &u_ned,
     const Eigen::Ref<const Eigen::VectorXd> &u_body_var);
 
 /**
  * *=== MUSIC ===*
  * @brief MUSIC estimator using Prompt correlators (I & Q)
- * @param az        Azimuth estimates [rad]
- * @param el        Elevation estimates [rad]
+ * @param az_mean   Azimuth estimates [rad]
+ * @param el_mean   Elevation estimates [rad]
  * @param P         Measured prompt correlators
+ * @param ant_xyz   Known antenna positions in the body frame
+ * @param n_ant     Known number of antennas in the array
+ * @param lambda    Wavelength for the signal of interest [m/rad]
  * @param thresh    Desired threshold of convergence
  */
 void MUSIC(
     double &az_mean,
     double &el_mean,
     const Eigen::Ref<const Eigen::VectorXcd> &P,
-    const Eigen::Ref<const Eigen::MatrixXd> &ant_xyz,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
     const int &n_ant,
     const double &lambda,
     const double &thresh = 1e-4);

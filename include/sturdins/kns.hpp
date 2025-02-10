@@ -118,12 +118,35 @@ class Kns {
    * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
    */
   void GnssUpdate(
-      const Eigen::MatrixXd &sv_pos,
-      const Eigen::MatrixXd &sv_vel,
-      const Eigen::VectorXd &psr,
-      const Eigen::VectorXd &psrdot,
-      const Eigen::VectorXd &psr_var,
-      const Eigen::VectorXd &psrdot_var);
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+      const Eigen::Ref<const Eigen::VectorXd> &psr,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+      const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot_var);
+
+  /**
+   * *=== PhasedArrayUpdate ===*
+   * @brief Correct state with GPS measurements
+   * @param sv_pos      Satellite ECEF positions [m]
+   * @param sv_vel      Satellite ECEF velocities [m/s]
+   * @param psr         Pseudorange measurements [m]
+   * @param psrdot      Pseudorange-rate measurements [m/s]
+   * @param psr_var     Pseudorange measurement variance [m^2]
+   * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
+   */
+  void PhasedArrayUpdate(
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+      const Eigen::Ref<const Eigen::VectorXd> &psr,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase,
+      const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot_var,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+      const int &n_ant,
+      const double &lamb);
 
   /**
    * @brief states
