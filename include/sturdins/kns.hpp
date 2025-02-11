@@ -148,6 +148,15 @@ class Kns {
       const int &n_ant,
       const double &lamb);
 
+  void AttitudeUpdate(
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+      const int &n_ant,
+      const double &lamb);
+
   /**
    * @brief states
    */
@@ -163,6 +172,7 @@ class Kns {
   Eigen::Vector3d ecef_v_;
   Eigen::Vector4d q_b_l_;
   Eigen::Matrix3d C_b_l_;
+  Eigen::MatrixXd P_;  // error state covariance
 
  private:
   /**
@@ -180,7 +190,6 @@ class Kns {
    * @brief Kalman Filter Matrices (these have constant size)
    */
   Eigen::VectorXd x_;  // error state vector
-  Eigen::MatrixXd P_;  // error state covariance
   Eigen::MatrixXd F_;  // state transition matrix
   Eigen::MatrixXd Q_;  // process covariance matrix
   Eigen::MatrixXd I11_;

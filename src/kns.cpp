@@ -13,6 +13,9 @@
 
 #include "sturdins/kns.hpp"
 
+#include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
+
 #include <iostream>
 #include <navtools/attitude.hpp>
 #include <navtools/constants.hpp>
@@ -20,17 +23,21 @@
 
 #include "sturdins/least-squares.hpp"
 
+template <typename T>
+struct fmt::formatter<T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>>
+    : ostream_formatter {};
+
 namespace sturdins {
 
 // *=== Kns ===*
 Kns::Kns()
-    : x_{Eigen::Vector<double, 11>::Zero()},
-      P_{Eigen::Matrix<double, 11, 11>::Zero()},
+    : P_{Eigen::Matrix<double, 11, 11>::Zero()},
+      x_{Eigen::Vector<double, 11>::Zero()},
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
       Q_{Eigen::Matrix<double, 11, 11>::Zero()},
       I11_{Eigen::Matrix<double, 11, 11>::Identity()},
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
-  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 3.0, 0.1;
 }
 Kns::Kns(
     const double lat,
@@ -49,8 +56,8 @@ Kns::Kns(
       vd_{veld},
       cb_{cb},
       cd_{cd},
-      x_{Eigen::Vector<double, 11>::Zero()},
       P_{Eigen::Matrix<double, 11, 11>::Zero()},
+      x_{Eigen::Vector<double, 11>::Zero()},
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
       Q_{Eigen::Matrix<double, 11, 11>::Zero()},
       I11_{Eigen::Matrix<double, 11, 11>::Identity()} {
@@ -333,7 +340,7 @@ void Kns::PhasedArrayUpdate(
   const int N = psr.size();
   const int M = 2 * N;
   const int MM = M + (n_ant - 1) * N;
-  Eigen::VectorXd dy(M);
+  Eigen::VectorXd dy(MM);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(MM, 11);
   for (int i = 0; i < N; i++) {
     H(i, 9) = 1.0;
@@ -394,8 +401,12 @@ void Kns::PhasedArrayUpdate(
       H(k2, 8) = hp(2);
       dy(k2) = phase(j, i) - pred_phase;
       navtools::WrapPiToPi<double>(dy(k2));
+      // dy(k2) = (dy(k2) > navtools::HALF_PI<>) ? dy(k2) - navtools::PI<> : dy(k2);
+      // dy(k2) = (dy(k2) < -navtools::HALF_PI<>) ? dy(k2) + navtools::PI<> : dy(k2);
       // std::cout << "meas_phase(" << k2 << "): " << phase(j, i) << " | est_phase(" << k2
       //           << "): " << pred_phase << " | dy(" << k2 << "): " << dy(k2) << "\n";
+      // spdlog::get("sturdr-console")
+      //     ->error("meas_phase: {} | pred_phase: {} | dy: {}", phase(j, i), pred_phase, dy(k2));
     }
 
     H(i, 0) = -u(0);
@@ -414,42 +425,46 @@ void Kns::PhasedArrayUpdate(
   // std::cout << "P: \n" << P_ << "\n";
   // std::cout << "R: \n" << R << "\n";
   // std::cout << "H: \n" << H << "\n";
+  // spdlog::get("sturdr-console")->warn("diag(R): {}", R.diagonal().transpose());
+  // spdlog::get("sturdr-console")->warn("dy: {}", dy.transpose());
+  // spdlog::get("sturdr-console")->warn("H: \n{}", H);
+  // spdlog::get("sturdr-console")->warn("P: \n{}", P_);
 
-  // innovation filter
+  // // innovation filter
+  // Eigen::MatrixXd PHt = P_ * H.transpose();
+  // Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
+  // Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
+  // const int new_M = (mask).count();
+  // if (new_M < MM) {
+  //   if (new_M > 0) {
+  //     Eigen::MatrixXd new_H(new_M, 8);
+  //     Eigen::MatrixXd new_R(new_M, new_M);
+  //     Eigen::VectorXd new_dy(new_M);
+  //     int k = 0;
+  //     for (int i = 0; i < M; i++) {
+  //       if (mask(i)) {
+  //         new_H.row(k) = H.row(i);
+  //         new_R(k, k) = R(i, i);
+  //         new_dy(k) = dy(i);
+  //         k++;
+  //       }
+  //     }
+
+  //     // === Kalman Update ===
+  //     Eigen::MatrixXd PHt = P_ * new_H.transpose();
+  //     Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+  //     Eigen::MatrixXd L = I11_ - K * new_H;
+  //     P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+  //     x_ += K * new_dy;
+  //   }
+  // } else {
+  // === Kalman Update ===
   Eigen::MatrixXd PHt = P_ * H.transpose();
-  Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
-  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
-  const int new_M = (mask).count();
-  if (new_M < MM) {
-    if (new_M > 0) {
-      Eigen::MatrixXd new_H(new_M, 8);
-      Eigen::MatrixXd new_R(new_M, new_M);
-      Eigen::VectorXd new_dy(new_M);
-      int k = 0;
-      for (int i = 0; i < M; i++) {
-        if (mask(i)) {
-          new_H.row(k) = H.row(i);
-          new_R(k, k) = R(i, i);
-          new_dy(k) = dy(i);
-          k++;
-        }
-      }
-
-      // === Kalman Update ===
-      Eigen::MatrixXd PHt = P_ * new_H.transpose();
-      Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
-      Eigen::MatrixXd L = I11_ - K * new_H;
-      P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
-      x_ += K * new_dy;
-    }
-  } else {
-    // === Kalman Update ===
-    Eigen::MatrixXd PHt = P_ * H.transpose();
-    Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
-    Eigen::MatrixXd L = I11_ - K * H;
-    P_ = L * P_ * L.transpose() + K * R * K.transpose();
-    x_ += K * dy;
-  }
+  Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
+  Eigen::MatrixXd L = I11_ - K * H;
+  P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  x_ += K * dy;
+  // }
 
   // Closed loop error corrections
   phi_ -= x_(0) / Hn_;
