@@ -166,7 +166,7 @@ bool PhasedArrayAttitude(
         //           << "): " << est_phase << "\n";
         dy(k) = meas_phase(j, i) - est_phase;
         navtools::WrapPiToPi<double>(dy(k));
-        H.row(k) = (navtools::Skew<double>(ant_ned.col(j)).transpose() * u_ned.col(i)) / lambda;
+        H.row(k) = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u_ned.col(i)) / lambda;
       }
     }
 

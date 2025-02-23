@@ -257,8 +257,8 @@ void Kns::GnssUpdate(
   for (int i = 0; i < N; i++) {
     RangeAndRate(
         ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
-    u = -C_e_l * u;
-    udot = -C_e_l * udot;
+    u = C_e_l * u;
+    udot = C_e_l * udot;
     H(i, 0) = u(0);
     H(i, 1) = u(1);
     H(i, 2) = u(2);
@@ -272,50 +272,50 @@ void Kns::GnssUpdate(
     dy(N + i) = psrdot(i) - pred_psrdot;
   }
 
-  // innovation filter
-  Eigen::MatrixXd PHt = P_ * H.transpose();
-  Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
-  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
-  const int new_M = (mask).count();
-  if (new_M < M) {
-    if (new_M > 0) {
-      Eigen::MatrixXd new_H(new_M, 8);
-      Eigen::MatrixXd new_R(new_M, new_M);
-      Eigen::VectorXd new_dy(new_M);
-      int k = 0;
-      for (int i = 0; i < M; i++) {
-        if (mask(i)) {
-          new_H.row(k) = H.row(i);
-          new_R(k, k) = R(i, i);
-          new_dy(k) = dy(i);
-          k++;
-        }
-      }
+  // // innovation filter
+  // Eigen::MatrixXd PHt = P_ * H.transpose();
+  // Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
+  // Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
+  // const int new_M = (mask).count();
+  // if (new_M < M) {
+  //   if (new_M > 0) {
+  //     Eigen::MatrixXd new_H(new_M, 8);
+  //     Eigen::MatrixXd new_R(new_M, new_M);
+  //     Eigen::VectorXd new_dy(new_M);
+  //     int k = 0;
+  //     for (int i = 0; i < M; i++) {
+  //       if (mask(i)) {
+  //         new_H.row(k) = H.row(i);
+  //         new_R(k, k) = R(i, i);
+  //         new_dy(k) = dy(i);
+  //         k++;
+  //       }
+  //     }
 
-      // === Kalman Update ===
-      Eigen::MatrixXd PHt = P_ * new_H.transpose();
-      Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
-      Eigen::MatrixXd L = I11_ - K * new_H;
-      P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
-      x_ += K * new_dy;
-    }
-  } else {
-    // === Kalman Update ===
-    Eigen::MatrixXd PHt = P_ * H.transpose();
-    Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
-    Eigen::MatrixXd L = I11_ - K * H;
-    P_ = L * P_ * L.transpose() + K * R * K.transpose();
-    x_ += K * dy;
-  }
+  //     // === Kalman Update ===
+  //     Eigen::MatrixXd PHt = P_ * new_H.transpose();
+  //     Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+  //     Eigen::MatrixXd L = I11_ - K * new_H;
+  //     P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+  //     x_ += K * new_dy;
+  //   }
+  // } else {
+  // === Kalman Update ===
+  Eigen::MatrixXd PHt = P_ * H.transpose();
+  Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
+  Eigen::MatrixXd L = I11_ - K * H;
+  P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  x_ += K * dy;
+  // }
 
   // Closed loop error corrections
-  phi_ -= x_(0) / Hn_;
-  lam_ -= x_(1) / (He_ * cL_);
-  h_ += x_(2);
-  vn_ -= x_(3);
-  ve_ -= x_(4);
-  vd_ -= x_(5);
-  Eigen::Vector4d q_err{1.0, -0.5 * x_(6), -0.5 * x_(7), -0.5 * x_(8)};
+  phi_ += x_(0) / Hn_;
+  lam_ += x_(1) / (He_ * cL_);
+  h_ -= x_(2);
+  vn_ += x_(3);
+  ve_ += x_(4);
+  vd_ += x_(5);
+  Eigen::Vector4d q_err{1.0, +0.5 * x_(6), +0.5 * x_(7), +0.5 * x_(8)};
   q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);
   cb_ += x_(9);
@@ -385,6 +385,7 @@ void Kns::PhasedArrayUpdate(
   ecef_v_ = C_l_e * ecef_v_;
   double pred_psr, pred_psrdot, pred_phase;
   Eigen::Matrix3Xd ant_ned = C_b_l_ * ant_xyz;
+  // std::cout << "C_b_l = \n" << C_b_l_ << "\n";
   for (int i = 0; i < N; i++) {
     RangeAndRate(
         ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);

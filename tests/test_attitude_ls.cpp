@@ -24,7 +24,7 @@ int main() {
   Eigen::Vector3d lla{32.5863 * navtools::DEG2RAD<>, -85.4943 * navtools::DEG2RAD<>, 213.0};
   Eigen::Vector3d nedv{0.0, 0.0, 0.0};
   Eigen::Vector3d rpy{
-      2.5 * navtools::DEG2RAD<>, -15.1 * navtools::DEG2RAD<>, 67.9 * navtools::DEG2RAD<>};
+      2.5 * navtools::DEG2RAD<>, -15.1 * navtools::DEG2RAD<>, -67.9 * navtools::DEG2RAD<>};
   // Eigen::Vector3d rpy{-0.5, 0.5, 3.0};
   // Eigen::Vector3d rpy{0.0, 0.0, 0.0};
   Eigen::MatrixXd ant_xyz{
