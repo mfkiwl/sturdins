@@ -111,7 +111,11 @@ void Strapdown::Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, 
   Eigen::Vector3d dTheta = (wb - C_b_l_.transpose() * (w_ie_n_ + w_en_n_)) * dt;
   double gamma = 0.5 * dTheta.norm();
   double cgamma = std::cos(gamma);
-  dTheta *= (0.5 * std::sin(gamma) / gamma);
+  if (gamma < 1e-5) {
+    dTheta *= 0.5;
+  } else {
+    dTheta *= (0.5 * std::sin(gamma) / gamma);
+  }
   Eigen::Matrix4d qdot{
       // clang-format off
       {   cgamma, -dTheta(0), -dTheta(1), -dTheta(2)},

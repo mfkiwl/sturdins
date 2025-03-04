@@ -294,8 +294,14 @@ void MUSIC(
         }
 
         // determine power based on input az & el
-        P_music(i, j) =
-            1.0 / std::abs((tmp.conjugate().transpose() * U * U.conjugate().transpose() * tmp)(0));
+        double d = std::abs((tmp.conjugate().transpose() * U * U.conjugate().transpose() * tmp)(0));
+        if (d > 1e-8) {
+          P_music(i, j) =
+              1.0 /
+              std::abs((tmp.conjugate().transpose() * U * U.conjugate().transpose() * tmp)(0));
+        } else {
+          P_music(i, j) = 0.0;
+        }
       }
     }
 
