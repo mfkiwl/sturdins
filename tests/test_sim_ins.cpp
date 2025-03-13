@@ -110,7 +110,7 @@ int main() {
       filt.GnssUpdate(meas.sv_pos, meas.sv_vel, meas.psr, meas.psrdot, psr_var, psrdot_var);
 
       // Extract and save states
-      Eigen::Vector3d f_rpy = navtools::dcm2euler<true, double>(filt.C_b_l_);
+      Eigen::Vector3d f_rpy = navtools::dcm2euler<double>(filt.C_b_l_, true);
       result.t = time;
       result.lat = navtools::RAD2DEG<> * filt.phi_;
       result.lon = navtools::RAD2DEG<> * filt.lam_;

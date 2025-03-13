@@ -34,7 +34,7 @@ int main() {
 
   // get user ecef states
   std::cout << "rotating user position to ecef\n";
-  Eigen::Matrix3d C_b_l = navtools::euler2dcm<true, double>(rpy);
+  Eigen::Matrix3d C_b_l = navtools::euler2dcm<double>(rpy, true);
   Eigen::Matrix3d C_e_l = navtools::ecef2nedDcm<double>(lla);
   Eigen::MatrixXd ant_xyz_ecef(3, n_ant);
   Eigen::Vector3d ecefv = navtools::ned2ecefv<double>(nedv, lla);
@@ -128,7 +128,7 @@ int main() {
   u_body_est.row(1) = est_az.array().sin() * est_el.array().cos();
   u_body_est.row(2) = -est_el.array().sin();
   sturdins::Wahba(C_l_b_est, u_body_est, u_ned, u_body_var);
-  Eigen::Vector3d rpy_est = navtools::dcm2euler<true, double>(C_l_b_est.transpose());
+  Eigen::Vector3d rpy_est = navtools::dcm2euler<double>(C_l_b_est.transpose(), true);
   // Eigen::Vector3d rpy_est = navtools::dcm2euler<true, double>(C_l_b_est);
 
   std::cout << "true_az: \n\t" << true_az.array().transpose() * navtools::RAD2DEG<> << "\n";
@@ -174,7 +174,7 @@ int main() {
       n_ant,
       lamb / navtools::TWO_PI<>,
       1e-9);
-  Eigen::Vector3d rpy_est2 = navtools::dcm2euler<true, double>(C_b_l_est);
+  Eigen::Vector3d rpy_est2 = navtools::dcm2euler<double>(C_b_l_est, true);
   std::cout << "est_rpy2: \n" << rpy_est2 * navtools::RAD2DEG<> << "\n";
 
   return 0;

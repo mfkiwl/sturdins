@@ -52,7 +52,7 @@ Strapdown::Strapdown(
           navtools::WGS84_R0<> * navtools::WGS84_RP<> / navtools::WGS84_MU<>} {
   // initialize attitude
   Eigen::Vector3d rpy{roll, pitch, yaw};
-  navtools::euler2quat<true, double>(q_b_l_, rpy);
+  navtools::euler2quat<double>(q_b_l_, rpy, true);
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);
 }
 
@@ -77,7 +77,7 @@ void Strapdown::SetVelocity(const double &veln, const double &vele, const double
 // *=== SetAttitude ===*
 void Strapdown::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
   Eigen::Vector3d rpy{roll, pitch, yaw};
-  navtools::euler2quat<true, double>(q_b_l_, rpy);
+  navtools::euler2quat<double>(q_b_l_, rpy, true);
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);
 }
 void Strapdown::SetAttitude(const Eigen::Matrix3d &C) {

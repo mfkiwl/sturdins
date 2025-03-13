@@ -76,7 +76,7 @@ target_link_libraries(
 )
 
 # --- Add Executables ---
-if (NOT DEFINED INSTALL_STURDINS_EXAMPLES OR NOT INSTALL_STURDINS_EXAMPLES)
+if (NOT DEFINED INSTALL_STURDINS_TESTS OR NOT INSTALL_STURDINS_TESTS)
 else()
     file(GLOB testfiles "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
     foreach(file ${testfiles})

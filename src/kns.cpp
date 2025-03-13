@@ -83,8 +83,8 @@ void Kns::SetVelocity(const double &veln, const double &vele, const double &veld
 // *=== SetAttitude ===*
 void Kns::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
   Eigen::Vector3d euler{roll, pitch, yaw};
-  navtools::euler2dcm<true, double>(C_b_l_, euler);
-  navtools::euler2quat<true, double>(q_b_l_, euler);
+  navtools::euler2dcm<double>(C_b_l_, euler, true);
+  navtools::euler2quat<double>(q_b_l_, euler, true);
 }
 
 // *=== SetClock ===*
