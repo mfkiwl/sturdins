@@ -80,13 +80,16 @@ void Strapdown::SetAttitude(const double &roll, const double &pitch, const doubl
   navtools::euler2quat<double>(q_b_l_, rpy, true);
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);
 }
-void Strapdown::SetAttitude(const Eigen::Matrix3d &C) {
+void Strapdown::SetAttitude(const Eigen::Ref<const Eigen::Matrix3d> &C) {
   C_b_l_ = C;
   navtools::dcm2quat<double>(q_b_l_, C_b_l_);
 }
 
 // *=== Mechanize ===*
-void Strapdown::Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const double &dt) {
+void Strapdown::Mechanize(
+    const Eigen::Ref<const Eigen::Vector3d> &wb,
+    const Eigen::Ref<const Eigen::Vector3d> &fb,
+    const double &dt) {
   // Sine functions of latitude
   sL_ = std::sin(phi_);
   cL_ = std::cos(phi_);

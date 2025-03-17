@@ -1,8 +1,8 @@
 /**
- * *ins.hpp*
+ * *inertial-nav.hpp*
  *
  * =======  ========================================================================================
- * @file    sturdins/ins.hpp
+ * @file    sturdins/inertial-nav.hpp
  * @brief   Inertial navigation Kalman Filter equations.
  * @date    January 2025
  * @author  Daniel Sturdivant <sturdivant20@gmail.com>
@@ -22,10 +22,10 @@
 
 namespace sturdins {
 
-class Ins : public Strapdown {
+class InertialNav : public Strapdown {
  public:
   /**
-   * *=== Ins ===*
+   * *=== InertialNav ===*
    * @brief constructor
    * @param lat   Initial latitude [rad]
    * @param lon   Initial longitude [rad]
@@ -39,8 +39,9 @@ class Ins : public Strapdown {
    * @param cb    Initial clock bias [m]
    * @param cd    Initial clock drift [m/s]
    */
-  Ins();
-  Ins(const double lat,
+  InertialNav();
+  InertialNav(
+      const double lat,
       const double lon,
       const double alt,
       const double veln,
@@ -56,7 +57,7 @@ class Ins : public Strapdown {
    * *=== ~Ins ===*
    * @brief Destructor
    */
-  ~Ins();
+  ~InertialNav();
 
   /**
    * * === SetImuSpec ===
@@ -73,9 +74,9 @@ class Ins : public Strapdown {
   /**
    * * === SetClockSpec ===
    * @brief Set the noise parameters of the Clock
-   * @param h0
-   * @param h1
-   * @param h2
+   * @param h0  white frequency modulation
+   * @param h1  flicker frequency modulation
+   * @param h2  random walk frequency modulation
    */
   void SetClockSpec(const double &h0, const double &h1, const double &h2);
 
@@ -94,7 +95,10 @@ class Ins : public Strapdown {
    * @param fb  Measured specific forces (delta velocities) in the body frame [m/s^2]
    * @param dt  Integration time [s]
    */
-  void Propagate(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const double &dt);
+  void Propagate(
+      const Eigen::Ref<const Eigen::Vector3d> &wb,
+      const Eigen::Ref<const Eigen::Vector3d> &fb,
+      const double &dt);
 
   /**
    * *=== GnssUpdate ===*
@@ -107,27 +111,52 @@ class Ins : public Strapdown {
    * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
    */
   void GnssUpdate(
-      const Eigen::MatrixXd &sv_pos,
-      const Eigen::MatrixXd &sv_vel,
-      const Eigen::VectorXd &psr,
-      const Eigen::VectorXd &psrdot,
-      const Eigen::VectorXd &psr_var,
-      const Eigen::VectorXd &psrdot_var);
+      const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
+      const Eigen::Ref<const Eigen::MatrixXd> &sv_vel,
+      const Eigen::Ref<const Eigen::VectorXd> &psr,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+      const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot_var);
+
+  /**
+   * *=== PhasedArrayUpdate ===*
+   * @brief Correct state with GPS measurements
+   * @param sv_pos      Satellite ECEF positions [m]
+   * @param sv_vel      Satellite ECEF velocities [m/s]
+   * @param psr         Pseudorange measurements [m]
+   * @param psrdot      Pseudorange-rate measurements [m/s]
+   * @param psr_var     Pseudorange measurement variance [m^2]
+   * @param psrdot_var  Pseudorange-rate measurement variance [(m/s)^2]
+   */
+  void PhasedArrayUpdate(
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+      const Eigen::Ref<const Eigen::VectorXd> &psr,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase,
+      const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+      const Eigen::Ref<const Eigen::VectorXd> &psrdot_var,
+      const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
+      const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+      const int &n_ant,
+      const double &lamb);
 
   /**
    * @brief States not included from Strapdown
    */
+  Eigen::Vector3d ecef_p_;
+  Eigen::Vector3d ecef_v_;
   Eigen::Vector3d bg_;  // gyroscope bias estimate
   Eigen::Vector3d ba_;  // accelerometer bias estimate
   double cb_;           // clock bias estimate
   double cd_;           // clock drift estimate
+  Eigen::MatrixXd P_;   // error state covariance
 
  private:
   /**
    * @brief Kalman Filter Matrices (these have constant size)
    */
   Eigen::VectorXd x_;  // error state vector
-  Eigen::MatrixXd P_;  // error state covariance
   Eigen::MatrixXd F_;  // state transition matrix
   Eigen::MatrixXd Q_;  // process covariance matrix
   Eigen::MatrixXd I17_;

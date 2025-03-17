@@ -20,29 +20,28 @@ set(BoldCyan    "${Esc}[1;36m")
 set(BoldWhite   "${Esc}[1;37m")
 
 # --- Version Control ---
-set(STURDR_MAJOR_VERSION 0)
+set(STURDR_MAJOR_VERSION 1)
 set(STURDR_MINOR_VERSION 0)
-set(STURDR_PATCH_VERSION 1)
+set(STURDR_PATCH_VERSION 0)
 set(PROJECT_VERSION ${STURDR_MAJOR_VERSION}.${STURDR_MINOR_VERSION}.${STURDR_PATCH_VERSION})
 message(STATUS "${BoldCyan}${PROJECT_NAME} version ${PROJECT_VERSION}${Reset}")
 
-# # --- Compiler Flags ---
-# set(CMAKE_CXX_STANDARD 20)
-# set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-# set(CMAKE_CXX_FLAGS_DEBUG "-g -W")
-# # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Ofast -ffast-math -fomit-frame-pointer -fstrict-aliasing -flto -DNDEBUG -march=native")
-# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Ofast -ffast-math")
+# --- Compiler Flags ---
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -W")
+# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Ofast -ffast-math -fomit-frame-pointer -fstrict-aliasing -flto -DNDEBUG -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 
 # --- Add Dependencies ---
 find_package(Eigen3 REQUIRED)
-find_package(spdlog REQUIRED)
 find_package(navtools REQUIRED)
 find_package(satutils REQUIRED)
 
 set(STURDINS_HDRS
-    include/sturdins/ins.hpp
-    include/sturdins/kns.hpp
+    include/sturdins/inertial-nav.hpp
+    include/sturdins/kinematic-nav.hpp
     include/sturdins/least-squares.hpp
     include/sturdins/nav-clock.hpp
     include/sturdins/nav-imu.hpp
@@ -50,8 +49,8 @@ set(STURDINS_HDRS
 )
 
 set(STURDINS_SRCS
-    src/ins.cpp
-    src/kns.cpp
+    src/inertial-nav.cpp
+    src/kinematic-nav.cpp
     src/least-squares.cpp
     src/nav-clock.cpp
     src/nav-imu.cpp
@@ -70,10 +69,10 @@ target_include_directories(
 target_link_libraries(
     ${PROJECT_NAME} PUBLIC
     Eigen3::Eigen
-    spdlog::spdlog
     navtools
     satutils
 )
+set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # --- Add Executables ---
 if (NOT DEFINED INSTALL_STURDINS_TESTS OR NOT INSTALL_STURDINS_TESTS)
@@ -125,3 +124,13 @@ install(
     FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config.cmake"
     DESTINATION lib/cmake/${PROJECT_NAME}
 )
+
+# --- Python ---
+if (NOT DEFINED INSTALL_PYTHON OR INSTALL_PYTHON)
+    find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(pybind11 CONFIG REQUIRED)
+    python_add_library(_sturdins_core MODULE src/sturdins-python.cpp WITH_SOABI)
+    target_link_libraries(_sturdins_core PRIVATE pybind11::headers ${PROJECT_NAME} navtools satutils)
+    target_compile_definitions(_sturdins_core PRIVATE VERSION_INFO=${PROJECT_VERSION})
+    install(TARGETS _sturdins_core DESTINATION sturdins)
+endif()

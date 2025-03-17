@@ -80,7 +80,7 @@ class Strapdown {
    * @param yaw    Yaw angle [rad]
    */
   void SetAttitude(const double &roll, const double &pitch, const double &yaw);
-  void SetAttitude(const Eigen::Matrix3d &C);
+  void SetAttitude(const Eigen::Ref<const Eigen::Matrix3d> &C);
 
   /**
    * @brief Integrate measured angular rates (delta thetas) and specific forces (delta velocities)
@@ -88,7 +88,10 @@ class Strapdown {
    * @param fb  Measured specific forces (delta velocities) in the body frame [m/s^2]
    * @param dt  Integration time [s]
    */
-  void Mechanize(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const double &dt);
+  void Mechanize(
+      const Eigen::Ref<const Eigen::Vector3d> &wb,
+      const Eigen::Ref<const Eigen::Vector3d> &fb,
+      const double &dt);
 
   /**
    * @brief states

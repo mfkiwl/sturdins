@@ -28,8 +28,8 @@ namespace sturdins {
  * @param vel         3x1 User ECEF velocity [m/s]
  * @param cb          User clock bias [m]
  * @param cd          User clock drift [m/s]
- * @param sv_pos      3xN Satellite ECEF positions [m]
- * @param sv_vel      3xN Satellite ECEF velocities [m/s]
+ * @param sv_pos      3x1 Satellite ECEF positions [m]
+ * @param sv_vel      3x1 Satellite ECEF velocities [m/s]
  * @param pred_u      3x1 reference to unit vector to satellite
  * @param pred_udot   3x1 reference to unit vector rate of change to satellite
  * @param pred_psr    Reference to pseudorange prediction
@@ -73,7 +73,7 @@ bool GnssPVT(
  * *=== PhasedArrayAttitude ===*
  * @brief Iterative attitude estimate based on the known spatial phase of an antenna array
  * @param C_b_l           Initial estimate of the body to local-nav frame attitude dcm
- * @param u_ned           Ephemeris based unit vectors in the local-nav frame
+ * @param u_ned           3 x n_sv Ephemeris based unit vectors in the local-nav frame
  * @param meas_phase      n_ant x n_sv matrix of measured differential gnss phase values
  * @param meas_phase_var  Variance of each phase measurement
  * @param ant_xyz         Known antenna positions in the body frame

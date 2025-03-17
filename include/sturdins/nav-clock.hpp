@@ -9,8 +9,8 @@
  * =======  ========================================================================================
  */
 
-#ifndef STURDINS_CLOCK_HPP
-#define STURDINS_CLOCK_HPP
+#ifndef STURDINS_NAV_CLOCK_HPP
+#define STURDINS_NAV_CLOCK_HPP
 
 #include <Eigen/Dense>
 #include <string>

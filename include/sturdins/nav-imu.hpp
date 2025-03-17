@@ -9,8 +9,8 @@
  * =======  ========================================================================================
  */
 
-#ifndef STURDINS_CLOCK_HPP
-#define STURDINS_CLOCK_HPP
+#ifndef STURDINS_NAV_IMU_HPP
+#define STURDINS_NAV_IMU_HPP
 
 #include <string>
 
@@ -45,6 +45,11 @@ inline constexpr NavigationIMU CONSUMER =
  */
 NavigationIMU GetNavImu(std::string imu_name);
 
+/**
+ * *=== NavImuToSiUnits ===*
+ * @brief Converts the NavigationIMU parameters to SI units of a navigation filter
+ * @param imu Allan variance parameters for the IMU
+ */
 void NavImuToSiUnits(NavigationIMU &imu);
 
 }  // namespace sturdins

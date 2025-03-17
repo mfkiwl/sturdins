@@ -1,8 +1,8 @@
 /**
- * *kns.cpp*
+ * *kinematic-nav.cpp*
  *
  * =======  ========================================================================================
- * @file    sturdins/kns.cpp
+ * @file    sturdins/kinematic-nav.cpp
  * @brief   Kinematic navigation Kalman Filter equations.
  * @date    January 2025
  * @author  Daniel Sturdivant <sturdivant20@gmail.com>
@@ -11,27 +11,25 @@
  * =======  ========================================================================================
  */
 
-#include "sturdins/kns.hpp"
+#include "sturdins/kinematic-nav.hpp"
 
-#include <Eigen/src/Core/util/Constants.h>
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/spdlog.h>
-
-#include <iostream>
 #include <navtools/attitude.hpp>
 #include <navtools/constants.hpp>
 #include <navtools/math.hpp>
 
 #include "sturdins/least-squares.hpp"
 
-template <typename T>
-struct fmt::formatter<T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>>
-    : ostream_formatter {};
+// #include <spdlog/fmt/ostr.h>
+// #include <spdlog/spdlog.h>
+// #include <iostream>
+// template <typename T>
+// struct fmt::formatter<T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>>
+//     : ostream_formatter {};
 
 namespace sturdins {
 
-// *=== Kns ===*
-Kns::Kns()
+// *=== KinematicNav ===*
+KinematicNav::KinematicNav()
     : P_{Eigen::Matrix<double, 11, 11>::Zero()},
       x_{Eigen::Vector<double, 11>::Zero()},
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
@@ -40,7 +38,7 @@ Kns::Kns()
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 3.0, 0.1;
 }
-Kns::Kns(
+KinematicNav::KinematicNav(
     const double lat,
     const double lon,
     const double alt,
@@ -65,36 +63,69 @@ Kns::Kns(
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
 }
+KinematicNav::KinematicNav(
+    const double lat,
+    const double lon,
+    const double alt,
+    const double veln,
+    const double vele,
+    const double veld,
+    const double roll,
+    const double pitch,
+    const double yaw,
+    const double cb,
+    const double cd)
+    : phi_{lat},
+      lam_{lon},
+      h_{alt},
+      vn_{veln},
+      ve_{vele},
+      vd_{veld},
+      cb_{cb},
+      cd_{cd},
+      P_{Eigen::Matrix<double, 11, 11>::Zero()},
+      x_{Eigen::Vector<double, 11>::Zero()},
+      F_{Eigen::Matrix<double, 11, 11>::Identity()},
+      Q_{Eigen::Matrix<double, 11, 11>::Zero()},
+      I11_{Eigen::Matrix<double, 11, 11>::Identity()},
+      X1ME2_{1.0 - navtools::WGS84_E2<>} {
+  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
+  SetAttitude(roll, pitch, yaw);
+}
 
 // *=== SetPosition ===*
-void Kns::SetPosition(const double &lat, const double &lon, const double &alt) {
+void KinematicNav::SetPosition(const double &lat, const double &lon, const double &alt) {
   phi_ = lat;
   lam_ = lon;
   h_ = alt;
 }
 
 // *=== SetVelocity ===*
-void Kns::SetVelocity(const double &veln, const double &vele, const double &veld) {
+void KinematicNav::SetVelocity(const double &veln, const double &vele, const double &veld) {
   vn_ = veln;
   ve_ = vele;
   vd_ = veld;
 }
 
 // *=== SetAttitude ===*
-void Kns::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
+void KinematicNav::SetAttitude(const double &roll, const double &pitch, const double &yaw) {
   Eigen::Vector3d euler{roll, pitch, yaw};
   navtools::euler2dcm<double>(C_b_l_, euler, true);
   navtools::euler2quat<double>(q_b_l_, euler, true);
 }
+void KinematicNav::SetAttitude(const Eigen::Ref<const Eigen::Matrix3d> &C) {
+  C_b_l_ = C;
+  navtools::dcm2quat<double>(q_b_l_, C_b_l_);
+}
 
 // *=== SetClock ===*
-void Kns::SetClock(const double &cb, const double &cd) {
+void KinematicNav::SetClock(const double &cb, const double &cd) {
   cb_ = cb;
   cd_ = cd;
 }
 
 // *=== SetClockSpec ===*
-void Kns::SetClockSpec(const double &h0, const double &h1, const double &h2) {
+void KinematicNav::SetClockSpec(const double &h0, const double &h1, const double &h2) {
   double LS2 = navtools::LIGHT_SPEED<> * navtools::LIGHT_SPEED<>;
   h0_ = LS2 * h0 / 2.0;
   h1_ = LS2 * 2.0 * h1;
@@ -102,7 +133,7 @@ void Kns::SetClockSpec(const double &h0, const double &h1, const double &h2) {
 }
 
 // *=== SetProcessNoise ===*
-void Kns::SetProcessNoise(const double &Svel, const double &Satt) {
+void KinematicNav::SetProcessNoise(const double &Svel, const double &Satt) {
   Sv_ = Svel;
   halfSv_ = Sv_ / 2.0;
   thirdSv_ = Sv_ / 3.0;
@@ -110,7 +141,7 @@ void Kns::SetProcessNoise(const double &Svel, const double &Satt) {
 }
 
 // *=== Propagate ===*
-void Kns::Propagate(const double &dt) {
+void KinematicNav::Propagate(const double &dt) {
   /**
    * @brief First order F/Phi matrix Groves Ch.9
    * --                      --
@@ -181,7 +212,7 @@ void Kns::Propagate(const double &dt) {
   cb_ += cd_ * dt;
 }
 
-void Kns::FalsePropagateState(
+void KinematicNav::FalsePropagateState(
     Eigen::Ref<Eigen::Vector3d> ecef_p,
     Eigen::Ref<Eigen::Vector3d> ecef_v,
     double &cb,
@@ -213,7 +244,7 @@ void Kns::FalsePropagateState(
 }
 
 // *=== GnssUpdate ===*
-void Kns::GnssUpdate(
+void KinematicNav::GnssUpdate(
     const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
     const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
     const Eigen::Ref<const Eigen::VectorXd> &psr,
@@ -326,7 +357,7 @@ void Kns::GnssUpdate(
 }
 
 // *=== PhasedArrayUpdate ===*
-void Kns::PhasedArrayUpdate(
+void KinematicNav::PhasedArrayUpdate(
     const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
     const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
     const Eigen::Ref<const Eigen::VectorXd> &psr,

@@ -1,8 +1,8 @@
 /**
- * *inertial-filter.cpp*
+ * *inertial-nav.cpp*
  *
  * =======  ========================================================================================
- * @file    sturdins/inertial-filter.cpp
+ * @file    sturdins/inertial-nav.cpp
  * @brief   Inertial navigation Kalman Filter equations.
  * @date    January 2025
  * @author  Daniel Sturdivant <sturdivant20@gmail.com>
@@ -13,9 +13,7 @@
  * =======  ========================================================================================
  */
 
-#include "sturdins/ins.hpp"
-
-#include <Eigen/src/Core/Matrix.h>
+#include "sturdins/inertial-nav.hpp"
 
 #include <navtools/attitude.hpp>
 #include <navtools/constants.hpp>
@@ -26,18 +24,18 @@
 
 namespace sturdins {
 
-// *=== Ins ===*
-Ins::Ins()
+// *=== InertialNav ===*
+InertialNav::InertialNav()
     : Strapdown(),
       bg_{Eigen::Vector<double, 3>::Zero()},
       ba_{Eigen::Vector<double, 3>::Zero()},
-      x_{Eigen::Vector<double, 17>::Zero()},
       P_{Eigen::Matrix<double, 17, 17>::Zero()},
+      x_{Eigen::Vector<double, 17>::Zero()},
       F_{Eigen::Matrix<double, 17, 17>::Zero()},
       Q_{Eigen::Matrix<double, 17, 17>::Zero()},
       I17_{Eigen::Matrix<double, 17, 17>::Identity()} {
 }
-Ins::Ins(
+InertialNav::InertialNav(
     const double lat,
     const double lon,
     const double alt,
@@ -54,19 +52,20 @@ Ins::Ins(
       ba_{Eigen::Vector<double, 3>::Zero()},
       cb_{cb},
       cd_{cd},
-      x_{Eigen::Vector<double, 17>::Zero()},
       P_{Eigen::Matrix<double, 17, 17>::Zero()},
+      x_{Eigen::Vector<double, 17>::Zero()},
       F_{Eigen::Matrix<double, 17, 17>::Zero()},
       Q_{Eigen::Matrix<double, 17, 17>::Zero()},
       I17_{Eigen::Matrix<double, 17, 17>::Identity()} {
 }
 
-// *=== ~Ins ===*
-Ins::~Ins() {
+// *=== ~InertialNav ===*
+InertialNav::~InertialNav() {
 }
 
 // *=== SetImuSpec ===*
-void Ins::SetImuSpec(const double &Ba, const double &Na, const double &Bg, const double &Ng) {
+void InertialNav::SetImuSpec(
+    const double &Ba, const double &Na, const double &Bg, const double &Ng) {
   double B_acc = Ba * 9.80665 / 1000.0;                // [mg] -> [(m/s)/s]
   double N_acc = Na / 60.0;                            // [(m/s)/√hr] -> [(m/s)/√s]
   double B_gyr = navtools::DEG2RAD<> * (Bg / 3600.0);  // [deg/hr] ->  [rad/s]
@@ -85,7 +84,7 @@ void Ins::SetImuSpec(const double &Ba, const double &Na, const double &Bg, const
 }
 
 // *=== SetClockSpec ===*
-void Ins::SetClockSpec(const double &h0, const double &h1, const double &h2) {
+void InertialNav::SetClockSpec(const double &h0, const double &h1, const double &h2) {
   double LS2 = navtools::LIGHT_SPEED<> * navtools::LIGHT_SPEED<>;
   h0_ = LS2 * h0 / 2.0;
   h1_ = LS2 * 2.0 * h1;
@@ -93,13 +92,16 @@ void Ins::SetClockSpec(const double &h0, const double &h1, const double &h2) {
 }
 
 // *=== SetClock ===*
-void Ins::SetClock(const double &cb, const double &cd) {
+void InertialNav::SetClock(const double &cb, const double &cd) {
   cb_ = cb;
   cd_ = cd;
 }
 
 // *=== Propagate ===*
-void Ins::Propagate(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const double &dt) {
+void InertialNav::Propagate(
+    const Eigen::Ref<const Eigen::Vector3d> &wb,
+    const Eigen::Ref<const Eigen::Vector3d> &fb,
+    const double &dt) {
   Rg_ = Re_ * std::sqrt(1.0 - sLsq_ * navtools::WGS84_E<> * (2.0 - navtools::WGS84_E<>));
   cLsq_ = cL_ * cL_;
   Hnsq_ = Hn_ * Hn_;
@@ -265,13 +267,13 @@ void Ins::Propagate(const Eigen::Vector3d &wb, const Eigen::Vector3d &fb, const 
 }
 
 // *=== GnssUpdate ===*
-void Ins::GnssUpdate(
-    const Eigen::MatrixXd &sv_pos,
-    const Eigen::MatrixXd &sv_vel,
-    const Eigen::VectorXd &psr,
-    const Eigen::VectorXd &psrdot,
-    const Eigen::VectorXd &psr_var,
-    const Eigen::VectorXd &psrdot_var) {
+void InertialNav::GnssUpdate(
+    const Eigen::Ref<const Eigen::MatrixXd> &sv_pos,
+    const Eigen::Ref<const Eigen::MatrixXd> &sv_vel,
+    const Eigen::Ref<const Eigen::VectorXd> &psr,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+    const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot_var) {
   // Initialize
   const int N = psr.size();
   const int M = 2 * N;
@@ -464,6 +466,108 @@ void Ins::GnssUpdate(
   cb_ += x_(15);
   cd_ += x_(16);
   x_.setZero();
+}
+
+// *=== PhasedArrayUpdate ===*
+void InertialNav::PhasedArrayUpdate(
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
+    const Eigen::Ref<const Eigen::VectorXd> &psr,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot,
+    const Eigen::Ref<const Eigen::MatrixXd> &phase,
+    const Eigen::Ref<const Eigen::VectorXd> &psr_var,
+    const Eigen::Ref<const Eigen::VectorXd> &psrdot_var,
+    const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
+    const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+    const int &n_ant,
+    const double &lamb) {
+  // Initialize
+  const int N = psr.size();
+  const int M = 2 * N;
+  const int MM = M + (n_ant - 1) * N;
+  Eigen::VectorXd dy(MM);
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(MM, 17);
+  for (int i = 0; i < N; i++) {
+    H(i, 15) = 1.0;
+    H(N + i, 16) = 1.0;
+  }
+
+  // measurement variance
+  int k1, k2;
+  Eigen::MatrixXd R = Eigen::MatrixXd::Zero(MM, MM);
+  for (int i = 0; i < N; i++) {
+    k1 = N + i;
+    R(i, i) = psr_var(i);
+    R(k1, k1) = psrdot_var(i);
+    for (int j = 1; j < n_ant; j++) {
+      k2 = M + (n_ant - 1) * i + j - 1;
+      R(k2, k2) = phase_var(j, i);
+    }
+  }
+
+  // Functions of current position
+  double sLam = std::sin(lam_);
+  double cLam = std::cos(lam_);
+  sL_ = std::sin(phi_);
+  cL_ = std::cos(phi_);
+  sLsq_ = sL_ * sL_;
+  Eigen::Matrix3d C_l_e{
+      {-sL_ * cLam, -sLam, -cL_ * cLam}, {-sL_ * sLam, cLam, -cL_ * sLam}, {cL_, 0.0, -sL_}};
+  Eigen::Matrix3d C_e_l = C_l_e.transpose();
+
+  // radii of curvature
+  double t = 1.0 - navtools::WGS84_E2<> * sLsq_;
+  double sqt = std::sqrt(t);
+  Re_ = navtools::WGS84_R0<> / sqt;
+  Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
+  He_ = Re_ + h_;
+  Hn_ = Rn_ + h_;
+
+  // Generate observation predictions
+  Eigen::Vector3d u, udot, hp;
+  ecef_p_ << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h_) * sL_;
+  ecef_v_ << vn_, ve_, vd_;
+  ecef_v_ = C_l_e * ecef_v_;
+  double pred_psr, pred_psrdot, pred_phase;
+  Eigen::Matrix3Xd ant_ned = C_b_l_ * ant_xyz;
+  // std::cout << "C_b_l = \n" << C_b_l_ << "\n";
+  for (int i = 0; i < N; i++) {
+    RangeAndRate(
+        ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
+    u = C_e_l * u;
+    udot = C_e_l * udot;
+
+    for (int j = 1; j < n_ant; j++) {
+      k2 = M + (n_ant - 1) * i + j - 1;
+      pred_phase = (ant_ned.col(j).transpose() * u)(0) / lamb;
+      hp = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u) / lamb;
+
+      H(k2, 6) = hp(0);
+      H(k2, 7) = hp(1);
+      H(k2, 8) = hp(2);
+      dy(k2) = phase(j, i) - pred_phase;
+      navtools::WrapPiToPi<double>(dy(k2));
+      dy(k2) = (dy(k2) > navtools::HALF_PI<>) ? dy(k2) - navtools::PI<> : dy(k2);
+      dy(k2) = (dy(k2) < -navtools::HALF_PI<>) ? dy(k2) + navtools::PI<> : dy(k2);
+      // std::cout << "meas_phase(" << k2 << "): " << phase(j, i) << " | est_phase(" << k2
+      //           << "): " << pred_phase << " | dy(" << k2 << "): " << dy(k2) << "\n";
+      // spdlog::get("sturdr-console")
+      //     ->error("meas_phase: {} | pred_phase: {} | dy: {}", phase(j, i), pred_phase,
+      // dy(k2));
+    }
+
+    H(i, 0) = u(0);
+    H(i, 1) = u(1);
+    H(i, 2) = u(2);
+    H(N + i, 0) = udot(0);
+    H(N + i, 1) = udot(1);
+    H(N + i, 2) = udot(2);
+    H(N + i, 3) = u(0);
+    H(N + i, 4) = u(1);
+    H(N + i, 5) = u(2);
+    dy(i) = psr(i) - pred_psr;
+    dy(N + i) = psrdot(i) - pred_psrdot;
+  }
 }
 
 }  // namespace sturdins

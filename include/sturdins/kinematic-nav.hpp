@@ -1,8 +1,8 @@
 /**
- * *kns.hpp*
+ * *kinematic-nav.hpp*
  *
  * =======  ========================================================================================
- * @file    sturdins/kns.hpp
+ * @file    sturdins/kinematic-nav.hpp
  * @brief   Kinematic navigation Kalman Filter equations.
  * @date    January 2025
  * @author  Daniel Sturdivant <sturdivant20@gmail.com>
@@ -20,10 +20,10 @@
 
 namespace sturdins {
 
-class Kns {
+class KinematicNav {
  public:
   /**
-   * *=== Kns ===*
+   * *=== KinematicNav ===*
    * @brief constructor
    * @param lat   Initial latitude [rad]
    * @param lon   Initial longitude [rad]
@@ -32,13 +32,26 @@ class Kns {
    * @param vele  Initial east velocity [m/s]
    * @param veld  Initial down velocity [m/s]
    */
-  Kns();
-  Kns(const double lat,
+  KinematicNav();
+  KinematicNav(
+      const double lat,
       const double lon,
       const double alt,
       const double veln,
       const double vele,
       const double veld,
+      const double cb,
+      const double cd);
+  KinematicNav(
+      const double lat,
+      const double lon,
+      const double alt,
+      const double veln,
+      const double vele,
+      const double veld,
+      const double roll,
+      const double pitch,
+      const double yaw,
       const double cb,
       const double cd);
 
@@ -68,6 +81,7 @@ class Kns {
    * @param yaw    Yaw (heading) [rad]
    */
   void SetAttitude(const double &roll, const double &pitch, const double &yaw);
+  void SetAttitude(const Eigen::Ref<const Eigen::Matrix3d> &C);
 
   /**
    * *=== SetClock ===*
@@ -80,17 +94,17 @@ class Kns {
   /**
    * * === SetClockSpec ===
    * @brief Set the noise parameters of the Clock
-   * @param h0
-   * @param h1
-   * @param h2
+   * @param h0  white frequency modulation
+   * @param h1  flicker frequency modulation
+   * @param h2  random walk frequency modulation
    */
   void SetClockSpec(const double &h0, const double &h1, const double &h2);
 
   /**
    * * === SetProcessNoise ===
    * @brief Set the noise parameter of the Kinematic (constant velocity) model
-   * @param Svel
-   * @param Satt
+   * @param Svel  PSD of expected acceleration white noise [(m/s^2)^2]
+   * @param Satt  PSD of expected angular rate white noise [(rad/s)^2]
    */
   void SetProcessNoise(const double &Svel, const double &Satt);
 
