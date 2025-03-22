@@ -162,15 +162,6 @@ class KinematicNav {
       const int &n_ant,
       const double &lamb);
 
-  void AttitudeUpdate(
-      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_pos,
-      const Eigen::Ref<const Eigen::Matrix3Xd> &sv_vel,
-      const Eigen::Ref<const Eigen::MatrixXd> &phase,
-      const Eigen::Ref<const Eigen::MatrixXd> &phase_var,
-      const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
-      const int &n_ant,
-      const double &lamb);
-
   /**
    * @brief states
    */
@@ -207,6 +198,7 @@ class KinematicNav {
   Eigen::MatrixXd F_;  // state transition matrix
   Eigen::MatrixXd Q_;  // process covariance matrix
   Eigen::MatrixXd I11_;
+  bool is_init_;
 
   /**
    * @brief Functions of latitude
@@ -223,6 +215,11 @@ class KinematicNav {
   double Rn_;     // Transverse radius
   double Hn_;     // Rn + h
   double He_;     // Re + h
+
+  void KalmanUpdate(
+      const Eigen::Ref<const Eigen::MatrixXd> &R,
+      const Eigen::Ref<const Eigen::MatrixXd> &H,
+      const Eigen::Ref<const Eigen::VectorXd> &dy);
 };
 
 }  // namespace sturdins

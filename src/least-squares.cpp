@@ -166,7 +166,8 @@ bool PhasedArrayAttitude(
         //           << "): " << est_phase << "\n";
         dy(k) = meas_phase(j, i) - est_phase;
         navtools::WrapPiToPi<double>(dy(k));
-        H.row(k) = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u_ned.col(i)) / lambda;
+        // H.row(k) = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u_ned.col(i)) / lambda;
+        H.row(k) = -(navtools::Skew(ant_ned.col(j)).transpose() * u_ned.col(i)) / lambda;
       }
     }
 
@@ -176,7 +177,8 @@ bool PhasedArrayAttitude(
     // std::cout << "H: \n" << H << "\n";
     dx = (H.transpose() * R * H).inverse() * H.transpose() * R * dy;
     // std::cout << "dx: " << dx.transpose() << "\n";
-    C_b_l = navtools::Skew<double>(dx).exp() * C_b_l;
+    // C_b_l = navtools::Skew<double>(dx).exp() * C_b_l;
+    C_b_l = navtools::Skew(dx).exp() * C_b_l;
 
     if (dx.squaredNorm() < thresh) {
       std::cout << "z = " << z << "\n";

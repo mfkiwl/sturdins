@@ -21,7 +21,7 @@
 
 // #include <spdlog/fmt/ostr.h>
 // #include <spdlog/spdlog.h>
-// #include <iostream>
+#include <iostream>
 // template <typename T>
 // struct fmt::formatter<T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>>
 //     : ostream_formatter {};
@@ -35,6 +35,7 @@ KinematicNav::KinematicNav()
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
       Q_{Eigen::Matrix<double, 11, 11>::Zero()},
       I11_{Eigen::Matrix<double, 11, 11>::Identity()},
+      is_init_{false},
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 3.0, 0.1;
 }
@@ -60,6 +61,7 @@ KinematicNav::KinematicNav(
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
       Q_{Eigen::Matrix<double, 11, 11>::Zero()},
       I11_{Eigen::Matrix<double, 11, 11>::Identity()},
+      is_init_{false},
       X1ME2_{1.0 - navtools::WGS84_E2<>} {
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
 }
@@ -169,27 +171,27 @@ void KinematicNav::Propagate(const double &dt) {
    */
   double dtsq = dt * dt;
   double dtcb = dtsq * dt;
-  Q_(0, 0) = 0.5 * thirdSv_ * dtcb;
+  Q_(0, 0) = thirdSv_ * dtcb;
   Q_(1, 1) = Q_(0, 0);
   Q_(2, 2) = Q_(0, 0);
-  Q_(0, 3) = 0.5 * halfSv_ * dtsq;
+  Q_(0, 3) = halfSv_ * dtsq;
   Q_(1, 4) = Q_(0, 3);
   Q_(2, 5) = Q_(0, 3);
   Q_(3, 0) = Q_(0, 3);
   Q_(4, 1) = Q_(0, 3);
   Q_(5, 2) = Q_(0, 3);
-  Q_(3, 3) = 0.5 * Sv_ * dt;
+  Q_(3, 3) = Sv_ * dt;
   Q_(4, 4) = Q_(3, 3);
   Q_(5, 5) = Q_(3, 3);
 
-  Q_(6, 6) = 0.5 * Sa_ * dt;
+  Q_(6, 6) = Sa_ * dt;
   Q_(7, 7) = Q_(6, 6);
-  Q_(8, 8) = 16.0 * Q_(6, 6);
+  Q_(8, 8) = 64.0 * Q_(6, 6);
 
-  Q_(9, 9) = 0.5 * ((h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb));
-  Q_(9, 10) = 0.5 * ((h1_ * dt) + (h2_ * dtsq));
+  Q_(9, 9) = (h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb);
+  Q_(9, 10) = (h1_ * dt) + (h2_ * dtsq);
   Q_(10, 9) = Q_(9, 10);
-  Q_(10, 10) = 0.5 * ((h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt));
+  Q_(10, 10) = (h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt);
 
   // Functions of latitude
   sL_ = std::sin(phi_);
@@ -205,7 +207,7 @@ void KinematicNav::Propagate(const double &dt) {
   Hn_ = Rn_ + h_;
 
   // === Kalman Propagation ===
-  P_ = F_ * (P_ + Q_) * F_.transpose() + Q_;
+  P_ = F_ * P_ * F_.transpose() + Q_;
   phi_ += vn_ / Hn_ * dt;
   lam_ += ve_ / (cL_ * He_) * dt;
   h_ -= vd_ * dt;
@@ -305,55 +307,8 @@ void KinematicNav::GnssUpdate(
     dy(N + i) = psrdot(i) - pred_psrdot;
   }
 
-  // innovation filter
-  Eigen::MatrixXd PHt = P_ * H.transpose();
-  Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
-  Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
-  const int new_M = (mask).count();
-  if (new_M < M) {
-    if (new_M > 0) {
-      Eigen::MatrixXd new_H(new_M, 8);
-      Eigen::MatrixXd new_R(new_M, new_M);
-      Eigen::VectorXd new_dy(new_M);
-      int k = 0;
-      for (int i = 0; i < M; i++) {
-        if (mask(i)) {
-          new_H.row(k) = H.row(i);
-          new_R(k, k) = R(i, i);
-          new_dy(k) = dy(i);
-          k++;
-        }
-      }
-
-      // === Kalman Update ===
-      Eigen::MatrixXd PHt = P_ * new_H.transpose();
-      Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
-      Eigen::MatrixXd L = I11_ - K * new_H;
-      P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
-      x_ += K * new_dy;
-    }
-  } else {
-    // === Kalman Update ===
-    Eigen::MatrixXd PHt = P_ * H.transpose();
-    Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
-    Eigen::MatrixXd L = I11_ - K * H;
-    P_ = L * P_ * L.transpose() + K * R * K.transpose();
-    x_ += K * dy;
-  }
-
-  // Closed loop error corrections
-  phi_ += x_(0) / Hn_;
-  lam_ += x_(1) / (He_ * cL_);
-  h_ -= x_(2);
-  vn_ += x_(3);
-  ve_ += x_(4);
-  vd_ += x_(5);
-  Eigen::Vector4d q_err{1.0, +0.5 * x_(6), +0.5 * x_(7), +0.5 * x_(8)};
-  q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
-  navtools::quat2dcm<double>(C_b_l_, q_b_l_);
-  cb_ += x_(9);
-  cd_ += x_(10);
-  x_.setZero();
+  // Kalman Update
+  KalmanUpdate(R, H, dy);
 }
 
 // *=== PhasedArrayUpdate ===*
@@ -375,21 +330,21 @@ void KinematicNav::PhasedArrayUpdate(
   const int MM = M + (n_ant - 1) * N;
   Eigen::VectorXd dy(MM);
   Eigen::MatrixXd H = Eigen::MatrixXd::Zero(MM, 11);
-  for (int i = 0; i < N; i++) {
-    H(i, 9) = 1.0;
-    H(N + i, 10) = 1.0;
+  for (int ii = 0; ii < N; ii++) {
+    H(ii, 9) = 1.0;
+    H(N + ii, 10) = 1.0;
   }
 
   // measurement variance
   int k1, k2;
   Eigen::MatrixXd R = Eigen::MatrixXd::Zero(MM, MM);
-  for (int i = 0; i < N; i++) {
-    k1 = N + i;
-    R(i, i) = psr_var(i);
-    R(k1, k1) = psrdot_var(i);
-    for (int j = 1; j < n_ant; j++) {
-      k2 = M + (n_ant - 1) * i + j - 1;
-      R(k2, k2) = phase_var(j, i);
+  for (int ii = 0; ii < N; ii++) {
+    k1 = N + ii;
+    R(ii, ii) = psr_var(ii);
+    R(k1, k1) = psrdot_var(ii);
+    for (int jj = 1; jj < n_ant; jj++) {
+      k2 = M + (n_ant - 1) * ii + jj - 1;
+      R(k2, k2) = phase_var(jj, ii);
     }
   }
 
@@ -419,66 +374,112 @@ void KinematicNav::PhasedArrayUpdate(
   double pred_psr, pred_psrdot, pred_phase;
   Eigen::Matrix3Xd ant_ned = C_b_l_ * ant_xyz;
   // std::cout << "C_b_l = \n" << C_b_l_ << "\n";
-  for (int i = 0; i < N; i++) {
+  for (int ii = 0; ii < N; ii++) {
     RangeAndRate(
-        ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr, pred_psrdot);
+        ecef_p_, ecef_v_, cb_, cd_, sv_pos.col(ii), sv_vel.col(ii), u, udot, pred_psr, pred_psrdot);
     u = C_e_l * u;
     udot = C_e_l * udot;
+    H(ii, 0) = u(0);
+    H(ii, 1) = u(1);
+    H(ii, 2) = u(2);
+    H(N + ii, 0) = udot(0);
+    H(N + ii, 1) = udot(1);
+    H(N + ii, 2) = udot(2);
+    H(N + ii, 3) = u(0);
+    H(N + ii, 4) = u(1);
+    H(N + ii, 5) = u(2);
+    dy(ii) = psr(ii) - pred_psr;
+    dy(N + ii) = psrdot(ii) - pred_psrdot;
 
-    for (int j = 1; j < n_ant; j++) {
-      k2 = M + (n_ant - 1) * i + j - 1;
-      pred_phase = (ant_ned.col(j).transpose() * u)(0) / lamb;
-      hp = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u) / lamb;
+    for (int jj = 1; jj < n_ant; jj++) {
+      k2 = M + (n_ant - 1) * ii + jj - 1;
+      pred_phase = -(ant_ned.col(jj).transpose() * u)(0) / lamb;
+      pred_phase = std::fmod(pred_phase + navtools::PI<>, navtools::TWO_PI<>) - navtools::PI<>;
+      if (pred_phase < -navtools::PI<>) {
+        pred_phase += navtools::TWO_PI<>;
+      } else if (pred_phase > navtools::PI<>) {
+        pred_phase -= navtools::TWO_PI<>;
+      }
+      // hp = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u) / lamb;
+      hp = 2.0 * (navtools::Skew(ant_ned.col(jj)).transpose() * u) / lamb;
 
       H(k2, 6) = hp(0);
       H(k2, 7) = hp(1);
       H(k2, 8) = hp(2);
-      dy(k2) = phase(j, i) - pred_phase;
-      navtools::WrapPiToPi<double>(dy(k2));
-      dy(k2) = (dy(k2) > navtools::HALF_PI<>) ? dy(k2) - navtools::PI<> : dy(k2);
-      dy(k2) = (dy(k2) < -navtools::HALF_PI<>) ? dy(k2) + navtools::PI<> : dy(k2);
-      // std::cout << "meas_phase(" << k2 << "): " << phase(j, i) << " | est_phase(" << k2
+      dy(k2) = phase(jj, ii) - pred_phase;
+      dy(k2) = std::fmod(dy(k2) + navtools::PI<>, navtools::TWO_PI<>) - navtools::PI<>;
+      if (dy(k2) < -navtools::PI<>) {
+        dy(k2) += navtools::TWO_PI<>;
+      } else if (dy(k2) > navtools::PI<>) {
+        dy(k2) -= navtools::TWO_PI<>;
+      }
+      // std::cout << "meas_phase(" << k2 << "): " << phase(jj, ii) << " | est_phase(" << k2
       //           << "): " << pred_phase << " | dy(" << k2 << "): " << dy(k2) << "\n";
-      // spdlog::get("sturdr-console")
-      //     ->error("meas_phase: {} | pred_phase: {} | dy: {}", phase(j, i), pred_phase,
-      // dy(k2));
     }
-
-    H(i, 0) = u(0);
-    H(i, 1) = u(1);
-    H(i, 2) = u(2);
-    H(N + i, 0) = udot(0);
-    H(N + i, 1) = udot(1);
-    H(N + i, 2) = udot(2);
-    H(N + i, 3) = u(0);
-    H(N + i, 4) = u(1);
-    H(N + i, 5) = u(2);
-    dy(i) = psr(i) - pred_psr;
-    dy(N + i) = psrdot(i) - pred_psrdot;
   }
-
-  // if (std::sqrt(ve_ * ve_ + vn_ * vn_) > 1.0) {
-  //   H.conservativeResize(H.rows() + 1, Eigen::NoChange);
-  //   H.row(H.rows() - 1) = Eigen::VectorXd::Zero(11);
-  //   H(H.rows() - 1, 8) = 1.0;
-
-  //   Eigen::Vector3d rpy = navtools::quat2euler<true, double>(q_b_l_);
-  //   dy.conservativeResize(dy.size() + 1);
-  //   dy(dy.size() - 1) = std::atan2(ve_, vn_) - rpy(2);
-  //   navtools::WrapPiToPi<double>(dy(dy.size() - 1));
-
-  //   R.conservativeResize(R.rows() + 1, R.cols() + 1);
-  //   R(R.rows() + 1, R.cols() + 1) = 0.0003;
-  // }
 
   // std::cout << "H: \n" << H << "\n";
   // std::cout << "dy: \n" << dy.segment(M - 1, MM - M).transpose() << "\n";
 
   // === Kalman Update ===
+  KalmanUpdate(R, H, dy);
+}
+
+void KinematicNav::KalmanUpdate(
+    const Eigen::Ref<const Eigen::MatrixXd> &R,
+    const Eigen::Ref<const Eigen::MatrixXd> &H,
+    const Eigen::Ref<const Eigen::VectorXd> &dy) {
+  // // innovation filter
+  // Eigen::MatrixXd PHt = P_ * H.transpose();
+  // Eigen::VectorXd sqrt_S = (H * PHt + R).diagonal().cwiseSqrt();
+  // Eigen::VectorX<bool> mask = (dy.array().abs() / sqrt_S.array()) < 3.0;
+  // const int new_M = (mask).count();
+  // if (new_M < M) {
+  //   if (new_M > 0) {
+  //     Eigen::MatrixXd new_H(new_M, 8);
+  //     Eigen::MatrixXd new_R(new_M, new_M);
+  //     Eigen::VectorXd new_dy(new_M);
+  //     int k = 0;
+  //     for (int i = 0; i < M; i++) {
+  //       if (mask(i)) {
+  //         new_H.row(k) = H.row(i);
+  //         new_R(k, k) = R(i, i);
+  //         new_dy(k) = dy(i);
+  //         k++;
+  //       }
+  //     }
+
+  //     // === Kalman Update ===
+  //     Eigen::MatrixXd PHt = P_ * new_H.transpose();
+  //     Eigen::MatrixXd K = PHt * (new_H * PHt + new_R).inverse();
+  //     Eigen::MatrixXd L = I11_ - K * new_H;
+  //     P_ = L * P_ * L.transpose() + K * new_R * K.transpose();
+  //     x_ += K * new_dy;
+  //   }
+  // } else {
+  //   // === Kalman Update ===
+  //   Eigen::MatrixXd PHt = P_ * H.transpose();
+  //   Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
+  //   Eigen::MatrixXd L = I11_ - K * H;
+  //   P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  //   x_ += K * dy;
+  // }
+
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
   Eigen::MatrixXd L = I11_ - K * H;
-  P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  if (!is_init_) {
+    for (int i = 0; i < 100; i++) {
+      P_ = L * P_ * L.transpose() + K * R * K.transpose();
+      P_ = F_ * P_ * F_.transpose() + Q_;
+      PHt = P_ * H.transpose();
+      K = PHt * (H * PHt + R).inverse();
+      L = I11_ - K * H;
+    }
+    is_init_ = true;
+  } else {
+    P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  }
   x_ += K * dy;
 
   // Closed loop error corrections
@@ -490,24 +491,24 @@ void KinematicNav::PhasedArrayUpdate(
   vd_ += x_(5);
   Eigen::Vector4d q_err{1.0, 0.5 * x_(6), 0.5 * x_(7), 0.5 * x_(8)};
   q_b_l_ = navtools::quatdot<double>(q_err, q_b_l_);
+  q_b_l_ /= q_b_l_.norm();
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);
   cb_ += x_(9);
   cd_ += x_(10);
   x_.setZero();
 }
 
-// //! Iterative EKF
-// Eigen::Vector3d u, udot;
-// Eigen::Vector3d ecef_p, ecef_v;
-// double pred_psr, pred_psrdot, cLam, sLam, t, sqt;
-// double lat = phi_, lon = lam_, alt = h_, veln = vn_, vele = ve_, veld = vd_, clkb = cb_,
-//        clkd = cd_;
-// Eigen::Matrix3d C_l_e, C_e_l;
-// Eigen::MatrixXd PHt(8, M), K(8, M);
+// //! ITERATIVE EKF
+// double sLam, cLam, t, sqt, pred_psr, pred_psrdot, pred_phase;
+// double lat = phi_, lon = lam_, h = h_, vn = vn_, ve = ve_, vd = vd_, cb = cb_, cd = cd_;
+// Eigen::Matrix3d C_l_e, C_e_l, C_b_l = C_b_l_;
+// Eigen::Vector4d q_err, q_b_l = q_b_l_;
+// Eigen::Vector3d u, udot, hp, ecef_p, ecef_v;
+// Eigen::Matrix3Xd ant_ned(3, n_ant);
+// Eigen::MatrixXd PHt(11, MM), K(11, MM);
 // Eigen::VectorXd x_k = x_;
-// Eigen::VectorXd delta(8);
-// for (int k = 0; k < 10; k++) {
-//   // update user position
+// Eigen::VectorXd delta(11);
+// for (int kk = 0; kk < 10; kk++) {
 //   sLam = std::sin(lon);
 //   cLam = std::cos(lon);
 //   sL_ = std::sin(lat);
@@ -515,34 +516,62 @@ void KinematicNav::PhasedArrayUpdate(
 //   sLsq_ = sL_ * sL_;
 //   C_l_e << -sL_ * cLam, -sLam, -cL_ * cLam, -sL_ * sLam, cLam, -cL_ * sLam, cL_, 0.0, -sL_;
 //   C_e_l = C_l_e.transpose();
+
 //   t = 1.0 - navtools::WGS84_E2<> * sLsq_;
 //   sqt = std::sqrt(t);
 //   Re_ = navtools::WGS84_R0<> / sqt;
 //   Rn_ = navtools::WGS84_R0<> * X1ME2_ / (t * t / sqt);
-//   He_ = Re_ + alt;
-//   Hn_ = Rn_ + alt;
-//   ecef_p << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + alt) * sL_;
-//   ecef_v << veln, vele, veld;
-//   ecef_v = C_l_e * ecef_v;
+//   He_ = Re_ + h;
+//   Hn_ = Rn_ + h;
 
-//   // iterate
-//   for (int i = 0; i < N; i++) {
+//   ecef_p << He_ * cL_ * cLam, He_ * cL_ * sLam, (Re_ * X1ME2_ + h) * sL_;
+//   ecef_v << vn, ve, vd;
+//   ecef_v = C_l_e * ecef_v;
+//   ant_ned = C_b_l * ant_xyz;
+
+//   for (int ii = 0; ii < N; ii++) {
+//     // range and range rate
 //     RangeAndRate(
-//         ecef_p, ecef_v, clkb, clkd, sv_pos.col(i), sv_vel.col(i), u, udot, pred_psr,
-//         pred_psrdot);
-//     u = -C_e_l * u;
-//     udot = -C_e_l * udot;
-//     H(i, 0) = u(0);
-//     H(i, 1) = u(1);
-//     H(i, 2) = u(2);
-//     H(N + i, 0) = udot(0);
-//     H(N + i, 1) = udot(1);
-//     H(N + i, 2) = udot(2);
-//     H(N + i, 3) = u(0);
-//     H(N + i, 4) = u(1);
-//     H(N + i, 5) = u(2);
-//     dy(i) = psr(i) - pred_psr;
-//     dy(N + i) = psrdot(i) - pred_psrdot;
+//         ecef_p, ecef_v, cb, cd, sv_pos.col(ii), sv_vel.col(ii), u, udot, pred_psr, pred_psrdot);
+//     u = C_e_l * u;
+//     udot = C_e_l * udot;
+//     H(ii, 0) = u(0);
+//     H(ii, 1) = u(1);
+//     H(ii, 2) = u(2);
+//     H(N + ii, 0) = udot(0);
+//     H(N + ii, 1) = udot(1);
+//     H(N + ii, 2) = udot(2);
+//     H(N + ii, 3) = u(0);
+//     H(N + ii, 4) = u(1);
+//     H(N + ii, 5) = u(2);
+//     dy(ii) = psr(ii) - pred_psr;
+//     dy(N + ii) = psrdot(ii) - pred_psrdot;
+
+//     for (int jj = 1; jj < n_ant; jj++) {
+//       k2 = M + (n_ant - 1) * ii + jj - 1;
+//       pred_phase = -(ant_ned.col(jj).transpose() * u)(0) / lamb;
+//       pred_phase = std::fmod(pred_phase + navtools::PI<>, navtools::TWO_PI<>) - navtools::PI<>;
+//       if (pred_phase < -navtools::PI<>) {
+//         pred_phase += navtools::TWO_PI<>;
+//       } else if (pred_phase > navtools::PI<>) {
+//         pred_phase -= navtools::TWO_PI<>;
+//       }
+//       // hp = -(navtools::Skew<double>(ant_ned.col(jj)).transpose() * u) / lamb;
+//       hp = (navtools::Skew(ant_ned.col(jj)).transpose() * u) / lamb;
+
+//       H(k2, 6) = hp(0);
+//       H(k2, 7) = hp(1);
+//       H(k2, 8) = hp(2);
+//       dy(k2) = phase(jj, ii) - pred_phase;
+//       dy(k2) = std::fmod(dy(k2) + navtools::PI<>, navtools::TWO_PI<>) - navtools::PI<>;
+//       if (dy(k2) < -navtools::PI<>) {
+//         dy(k2) += navtools::TWO_PI<>;
+//       } else if (dy(k2) > navtools::PI<>) {
+//         dy(k2) -= navtools::TWO_PI<>;
+//       }
+//       std::cout << "meas_phase(" << k2 << "): " << phase(jj, ii) << " | est_phase(" << k2
+//                 << "): " << pred_phase << " | dy(" << k2 << "): " << dy(k2) << "\n";
+//     }
 //   }
 
 //   // iterative corrections
@@ -552,29 +581,35 @@ void KinematicNav::PhasedArrayUpdate(
 //   x_k += delta;
 
 //   // Closed loop error corrections
-//   lat = phi_ - x_k(0) / Hn_;
-//   lon = lam_ - x_k(1) / (He_ * cL_);
-//   alt = h_ + x_k(2);
-//   veln = vn_ - x_k(3);
-//   vele = ve_ - x_k(4);
-//   veld = vd_ - x_k(5);
-//   clkb = cb_ + x_k(6);
-//   clkd = cd_ + x_k(7);
+//   lat = phi_ + x_k(0) / Hn_;
+//   lon = lam_ + x_k(1) / (He_ * cL_);
+//   h = h_ - x_k(2);
+//   vn = vn_ + x_k(3);
+//   ve = ve_ + x_k(4);
+//   vd = vd_ + x_k(5);
+//   q_err << 1.0, 0.5 * x_k(6), 0.5 * x_k(7), 0.5 * x_k(8);
+//   q_b_l = navtools::quatdot<double>(q_err, q_b_l_);
+//   q_b_l /= q_b_l.norm();
+//   navtools::quat2dcm<double>(C_b_l, q_b_l);
+//   cb = cb_ + x_k(9);
+//   cd = cd_ + x_k(10);
 
-//   if (delta.squaredNorm() < 1e-10) break;
+//   if (delta.norm() < 1e-6) break;
 // }
 
 // // finish Kalman update
-// Eigen::MatrixXd L = I8_ - K * H;
+// Eigen::MatrixXd L = I11_ - K * H;
 // P_ = L * P_ * L.transpose() + K * R * K.transpose();
 // x_.setZero();
 // phi_ = lat;
 // lam_ = lon;
-// h_ = alt;
-// vn_ = veln;
-// ve_ = vele;
-// vd_ = veld;
-// cb_ = clkb;
-// cd_ = clkd;
+// h_ = h;
+// vn_ = vn;
+// ve_ = ve;
+// vd_ = vd;
+// cb_ = cb;
+// cd_ = cd;
+// q_b_l_ = q_b_l;
+// C_b_l_ = C_b_l;
 
 }  // namespace sturdins

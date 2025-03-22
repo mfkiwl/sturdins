@@ -18,6 +18,8 @@
 #ifndef STURDINS_INS_HPP
 #define STURDINS_INS_HPP
 
+#include <Eigen/Dense>
+
 #include "sturdins/strapdown.hpp"
 
 namespace sturdins {
@@ -160,6 +162,7 @@ class InertialNav : public Strapdown {
   Eigen::MatrixXd F_;  // state transition matrix
   Eigen::MatrixXd Q_;  // process covariance matrix
   Eigen::MatrixXd I17_;
+  bool is_init_;
 
   /**
    * @brief IMU allan variance parameters
@@ -175,6 +178,11 @@ class InertialNav : public Strapdown {
   double h0_;
   double h1_;
   double h2_;
+
+  void KalmanUpdate(
+      const Eigen::Ref<const Eigen::MatrixXd> &R,
+      const Eigen::Ref<const Eigen::MatrixXd> &H,
+      const Eigen::Ref<const Eigen::VectorXd> &dy);
 };
 
 }  // namespace sturdins
