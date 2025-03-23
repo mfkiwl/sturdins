@@ -129,9 +129,9 @@ void KinematicNav::SetClock(const double &cb, const double &cd) {
 // *=== SetClockSpec ===*
 void KinematicNav::SetClockSpec(const double &h0, const double &h1, const double &h2) {
   double LS2 = navtools::LIGHT_SPEED<> * navtools::LIGHT_SPEED<>;
-  h0_ = LS2 * h0 / 2.0;
-  h1_ = LS2 * 2.0 * h1;
-  h2_ = LS2 * navtools::PI_SQU<> * h2;
+  h0_ = 1.1 * LS2 * h0 / 2.0;
+  h1_ = 1.1 * LS2 * 2.0 * h1;
+  h2_ = 1.1 * LS2 * 2.0 * navtools::PI_SQU<> * h2;
 }
 
 // *=== SetProcessNoise ===*
@@ -188,10 +188,14 @@ void KinematicNav::Propagate(const double &dt) {
   Q_(7, 7) = Q_(6, 6);
   Q_(8, 8) = 64.0 * Q_(6, 6);
 
-  Q_(9, 9) = (h0_ * dt) + (h1_ * dtsq) + (2.0 / 3.0 * h2_ * dtcb);
-  Q_(9, 10) = (h1_ * dt) + (h2_ * dtsq);
+  Q_(9, 9) = (h0_ * dt) + (h1_ * dtsq) + (h2_ * dtcb / 3.0);
+  Q_(9, 10) = (h1_ * dt) + (h2_ * dtsq / 2.0);
   Q_(10, 9) = Q_(9, 10);
-  Q_(10, 10) = (h0_ / dt) + h1_ + (8.0 / 3.0 * h2_ * dt);
+  Q_(10, 10) = (h0_ / dt) + h1_ + (4.0 / 3.0 * h2_ * dt);
+  // Q_(9, 9) = h0_ * dt + h2_ * dtcb / 3.0;
+  // Q_(9, 10) = h2_ * dtsq / 2.0;
+  // Q_(10, 9) = Q_(9, 10);
+  // Q_(10, 10) = h2_ * dt;
 
   // Functions of latitude
   sL_ = std::sin(phi_);
