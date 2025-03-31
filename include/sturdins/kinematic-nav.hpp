@@ -177,15 +177,15 @@ class KinematicNav {
   Eigen::Vector3d ecef_v_;
   Eigen::Vector4d q_b_l_;
   Eigen::Matrix3d C_b_l_;
-  Eigen::MatrixXd P_;  // error state covariance
+  Eigen::Matrix<double, 11, 11> P_;  // error state covariance
 
  private:
   /**
    * @brief Process noise allan variance parameters
    */
-  double h0_;
-  double h1_;
-  double h2_;
+  double Sb_;
+  double Sbd_;
+  double Sd_;
   double Sv_;
   double Sa_;
   double halfSv_;
@@ -194,10 +194,10 @@ class KinematicNav {
   /**
    * @brief Kalman Filter Matrices (these have constant size)
    */
-  Eigen::VectorXd x_;  // error state vector
-  Eigen::MatrixXd F_;  // state transition matrix
-  Eigen::MatrixXd Q_;  // process covariance matrix
-  Eigen::MatrixXd I11_;
+  Eigen::Vector<double, 11> x_;      // error state vector
+  Eigen::Matrix<double, 11, 11> F_;  // state transition matrix
+  Eigen::Matrix<double, 11, 11> Q_;  // process covariance matrix
+  Eigen::Matrix<double, 11, 11> I11_;
   bool is_init_;
 
   /**
@@ -215,6 +215,7 @@ class KinematicNav {
   double Rn_;     // Transverse radius
   double Hn_;     // Rn + h
   double He_;     // Re + h
+  double LS2_;
 
   void KalmanUpdate(
       const Eigen::Ref<const Eigen::MatrixXd> &R,

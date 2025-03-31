@@ -37,20 +37,14 @@ Strapdown::Strapdown(
     const double roll,
     const double pitch,
     const double yaw)
-    : phi_{lat},
-      lam_{lon},
-      h_{alt},
-      vn_{veln},
-      ve_{vele},
-      vd_{veld},
-      X1ME2_{1.0 - navtools::WGS84_E2<>},
-      g_{Eigen::Vector3d::Zero()},
-      w_en_n_{Eigen::Vector3d::Zero()},
-      w_ie_n_{Eigen::Vector3d::Zero()},
-      wR0sqRpMu_{
-          navtools::WGS84_OMEGA<> * navtools::WGS84_OMEGA<> * navtools::WGS84_R0<> *
-          navtools::WGS84_R0<> * navtools::WGS84_RP<> / navtools::WGS84_MU<>} {
-  // initialize attitude
+    : Strapdown() {
+  // initialize states
+  phi_ = lat;
+  lam_ = lon;
+  h_ = alt;
+  vn_ = veln;
+  ve_ = vele;
+  vd_ = veld;
   Eigen::Vector3d rpy{roll, pitch, yaw};
   navtools::euler2quat<double>(q_b_l_, rpy, true);
   navtools::quat2dcm<double>(C_b_l_, q_b_l_);

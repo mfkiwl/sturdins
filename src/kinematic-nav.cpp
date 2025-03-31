@@ -13,30 +13,27 @@
 
 #include "sturdins/kinematic-nav.hpp"
 
+#include <iostream>
 #include <navtools/attitude.hpp>
 #include <navtools/constants.hpp>
 #include <navtools/math.hpp>
 
 #include "sturdins/least-squares.hpp"
 
-// #include <spdlog/fmt/ostr.h>
-// #include <spdlog/spdlog.h>
-#include <iostream>
-// template <typename T>
-// struct fmt::formatter<T, std::enable_if_t<std::is_base_of_v<Eigen::DenseBase<T>, T>, char>>
-//     : ostream_formatter {};
-
 namespace sturdins {
 
 // *=== KinematicNav ===*
 KinematicNav::KinematicNav()
-    : P_{Eigen::Matrix<double, 11, 11>::Zero()},
+    : q_b_l_{Eigen::Vector4d{1.0, 0.0, 0.0, 0.0}},
+      C_b_l_{Eigen::Matrix3d::Identity()},
+      P_{Eigen::Matrix<double, 11, 11>::Zero()},
       x_{Eigen::Vector<double, 11>::Zero()},
       F_{Eigen::Matrix<double, 11, 11>::Identity()},
       Q_{Eigen::Matrix<double, 11, 11>::Zero()},
       I11_{Eigen::Matrix<double, 11, 11>::Identity()},
       is_init_{false},
-      X1ME2_{1.0 - navtools::WGS84_E2<>} {
+      X1ME2_{1.0 - navtools::WGS84_E2<>},
+      LS2_{navtools::LIGHT_SPEED<> * navtools::LIGHT_SPEED<>} {
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.01, 0.01, 0.01, 3.0, 0.1;
 }
 KinematicNav::KinematicNav(
@@ -48,21 +45,15 @@ KinematicNav::KinematicNav(
     const double veld,
     const double cb,
     const double cd)
-    : phi_{lat},
-      lam_{lon},
-      h_{alt},
-      vn_{veln},
-      ve_{vele},
-      vd_{veld},
-      cb_{cb},
-      cd_{cd},
-      P_{Eigen::Matrix<double, 11, 11>::Zero()},
-      x_{Eigen::Vector<double, 11>::Zero()},
-      F_{Eigen::Matrix<double, 11, 11>::Identity()},
-      Q_{Eigen::Matrix<double, 11, 11>::Zero()},
-      I11_{Eigen::Matrix<double, 11, 11>::Identity()},
-      is_init_{false},
-      X1ME2_{1.0 - navtools::WGS84_E2<>} {
+    : KinematicNav() {
+  phi_ = lat;
+  lam_ = lon;
+  h_ = alt;
+  vn_ = veln;
+  ve_ = vele;
+  vd_ = veld;
+  cb_ = cb;
+  cd_ = cd;
   P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
 }
 KinematicNav::KinematicNav(
@@ -77,21 +68,7 @@ KinematicNav::KinematicNav(
     const double yaw,
     const double cb,
     const double cd)
-    : phi_{lat},
-      lam_{lon},
-      h_{alt},
-      vn_{veln},
-      ve_{vele},
-      vd_{veld},
-      cb_{cb},
-      cd_{cd},
-      P_{Eigen::Matrix<double, 11, 11>::Zero()},
-      x_{Eigen::Vector<double, 11>::Zero()},
-      F_{Eigen::Matrix<double, 11, 11>::Identity()},
-      Q_{Eigen::Matrix<double, 11, 11>::Zero()},
-      I11_{Eigen::Matrix<double, 11, 11>::Identity()},
-      X1ME2_{1.0 - navtools::WGS84_E2<>} {
-  P_.diagonal() << 9.0, 9.0, 9.0, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1, 3.0, 0.1;
+    : KinematicNav(lat, lon, alt, veln, vele, veld, cb, cd) {
   SetAttitude(roll, pitch, yaw);
 }
 
@@ -128,10 +105,9 @@ void KinematicNav::SetClock(const double &cb, const double &cd) {
 
 // *=== SetClockSpec ===*
 void KinematicNav::SetClockSpec(const double &h0, const double &h1, const double &h2) {
-  double LS2 = navtools::LIGHT_SPEED<> * navtools::LIGHT_SPEED<>;
-  h0_ = 1.1 * LS2 * h0 / 2.0;
-  h1_ = 1.1 * LS2 * 2.0 * h1;
-  h2_ = 1.1 * LS2 * 2.0 * navtools::PI_SQU<> * h2;
+  Sb_ = 1.1 * (h0 / 2.0);
+  Sd_ = 1.1 * (h2 * 2.0 * navtools::PI_SQU<>);
+  Sbd_ = 1.1 * (h1 * 2.0);
 }
 
 // *=== SetProcessNoise ===*
@@ -173,29 +149,32 @@ void KinematicNav::Propagate(const double &dt) {
   double dtcb = dtsq * dt;
   Q_(0, 0) = thirdSv_ * dtcb;
   Q_(1, 1) = Q_(0, 0);
-  Q_(2, 2) = Q_(0, 0);
+  Q_(2, 2) = 4.0 * Q_(0, 0);
   Q_(0, 3) = halfSv_ * dtsq;
   Q_(1, 4) = Q_(0, 3);
-  Q_(2, 5) = Q_(0, 3);
+  Q_(2, 5) = 4.0 * Q_(0, 3);
   Q_(3, 0) = Q_(0, 3);
   Q_(4, 1) = Q_(0, 3);
-  Q_(5, 2) = Q_(0, 3);
+  Q_(5, 2) = 4.0 * Q_(0, 3);
   Q_(3, 3) = Sv_ * dt;
   Q_(4, 4) = Q_(3, 3);
-  Q_(5, 5) = Q_(3, 3);
+  Q_(5, 5) = 4.0 * Q_(3, 3);
 
   Q_(6, 6) = Sa_ * dt;
   Q_(7, 7) = Q_(6, 6);
-  Q_(8, 8) = 64.0 * Q_(6, 6);
+  Q_(8, 8) = 128.0 * Q_(6, 6);
 
-  Q_(9, 9) = (h0_ * dt) + (h1_ * dtsq) + (h2_ * dtcb / 3.0);
-  Q_(9, 10) = (h1_ * dt) + (h2_ * dtsq / 2.0);
+  Q_(9, 9) = 4.0 * LS2_ * ((Sb_ * dt) + (Sbd_ * dtsq) + (Sd_ * dtcb / 3.0));
+  Q_(9, 10) = 4.0 * LS2_ * ((Sbd_ * dt) + (Sd_ * dtsq / 2.0));
   Q_(10, 9) = Q_(9, 10);
-  Q_(10, 10) = (h0_ / dt) + h1_ + (4.0 / 3.0 * h2_ * dt);
+  Q_(10, 10) = 4.0 * LS2_ * (((Sb_ / dt) + (Sbd_) + (4.0 / 3.0 * Sd_ * dt)));
   // Q_(9, 9) = h0_ * dt + h2_ * dtcb / 3.0;
   // Q_(9, 10) = h2_ * dtsq / 2.0;
   // Q_(10, 9) = Q_(9, 10);
   // Q_(10, 10) = h2_ * dt;
+
+  // std::cout << "F = \n" << F_ << "\n";
+  // std::cout << "Q = \n" << Q_ << "\n";
 
   // Functions of latitude
   sL_ = std::sin(phi_);
@@ -405,7 +384,7 @@ void KinematicNav::PhasedArrayUpdate(
         pred_phase -= navtools::TWO_PI<>;
       }
       // hp = -(navtools::Skew<double>(ant_ned.col(j)).transpose() * u) / lamb;
-      hp = 2.0 * (navtools::Skew(ant_ned.col(jj)).transpose() * u) / lamb;
+      hp = (navtools::Skew(ant_ned.col(jj)).transpose() * u) / lamb;
 
       H(k2, 6) = hp(0);
       H(k2, 7) = hp(1);
@@ -485,6 +464,9 @@ void KinematicNav::KalmanUpdate(
     P_ = L * P_ * L.transpose() + K * R * K.transpose();
   }
   x_ += K * dy;
+
+  // std::cout << "dy = \n" << dy.transpose() << "\ndx = \n" << x_.transpose() << "\n";
+  // std::cout << "H = \n" << H << "\n";
 
   // Closed loop error corrections
   phi_ += x_(0) / Hn_;
