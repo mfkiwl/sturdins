@@ -149,25 +149,25 @@ void KinematicNav::Propagate(const double &dt) {
   double dtcb = dtsq * dt;
   Q_(0, 0) = thirdSv_ * dtcb;
   Q_(1, 1) = Q_(0, 0);
-  Q_(2, 2) = 4.0 * Q_(0, 0);
+  Q_(2, 2) = Q_(0, 0);
   Q_(0, 3) = halfSv_ * dtsq;
   Q_(1, 4) = Q_(0, 3);
-  Q_(2, 5) = 4.0 * Q_(0, 3);
+  Q_(2, 5) = Q_(0, 3);
   Q_(3, 0) = Q_(0, 3);
   Q_(4, 1) = Q_(0, 3);
-  Q_(5, 2) = 4.0 * Q_(0, 3);
+  Q_(5, 2) = Q_(0, 3);
   Q_(3, 3) = Sv_ * dt;
   Q_(4, 4) = Q_(3, 3);
-  Q_(5, 5) = 4.0 * Q_(3, 3);
+  Q_(5, 5) = Q_(3, 3);
 
   Q_(6, 6) = Sa_ * dt;
   Q_(7, 7) = Q_(6, 6);
-  Q_(8, 8) = 128.0 * Q_(6, 6);
+  Q_(8, 8) = Q_(6, 6) * 4.0;
 
-  Q_(9, 9) = 4.0 * LS2_ * ((Sb_ * dt) + (Sbd_ * dtsq) + (Sd_ * dtcb / 3.0));
-  Q_(9, 10) = 4.0 * LS2_ * ((Sbd_ * dt) + (Sd_ * dtsq / 2.0));
+  Q_(9, 9) = LS2_ * ((Sb_ * dt) + (Sbd_ * dtsq) + (Sd_ * dtcb / 3.0));
+  Q_(9, 10) = LS2_ * ((Sbd_ * dt) + (Sd_ * dtsq / 2.0));
   Q_(10, 9) = Q_(9, 10);
-  Q_(10, 10) = 4.0 * LS2_ * (((Sb_ / dt) + (Sbd_) + (4.0 / 3.0 * Sd_ * dt)));
+  Q_(10, 10) = LS2_ * (((Sb_ / dt) + (Sbd_) + (4.0 / 3.0 * Sd_ * dt)));
   // Q_(9, 9) = h0_ * dt + h2_ * dtcb / 3.0;
   // Q_(9, 10) = h2_ * dtsq / 2.0;
   // Q_(10, 9) = Q_(9, 10);
@@ -317,6 +317,7 @@ void KinematicNav::PhasedArrayUpdate(
     H(ii, 9) = 1.0;
     H(N + ii, 10) = 1.0;
   }
+  // std::cout << "psr_var = " << psr_var(0) << ", psrdot_var = " << psrdot_var(0) << "\n";
 
   // measurement variance
   int k1, k2;
@@ -451,18 +452,18 @@ void KinematicNav::KalmanUpdate(
   Eigen::MatrixXd PHt = P_ * H.transpose();
   Eigen::MatrixXd K = PHt * (H * PHt + R).inverse();
   Eigen::MatrixXd L = I11_ - K * H;
-  if (!is_init_) {
-    for (int i = 0; i < 100; i++) {
-      P_ = L * P_ * L.transpose() + K * R * K.transpose();
-      P_ = F_ * P_ * F_.transpose() + Q_;
-      PHt = P_ * H.transpose();
-      K = PHt * (H * PHt + R).inverse();
-      L = I11_ - K * H;
-    }
-    is_init_ = true;
-  } else {
-    P_ = L * P_ * L.transpose() + K * R * K.transpose();
-  }
+  // if (!is_init_) {
+  //   for (int i = 0; i < 100; i++) {
+  //     P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  //     P_ = F_ * P_ * F_.transpose() + Q_;
+  //     PHt = P_ * H.transpose();
+  //     K = PHt * (H * PHt + R).inverse();
+  //     L = I11_ - K * H;
+  //   }
+  //   is_init_ = true;
+  // } else {
+  P_ = L * P_ * L.transpose() + K * R * K.transpose();
+  // }
   x_ += K * dy;
 
   // std::cout << "dy = \n" << dy.transpose() << "\ndx = \n" << x_.transpose() << "\n";
@@ -482,6 +483,8 @@ void KinematicNav::KalmanUpdate(
   cb_ += x_(9);
   cd_ += x_(10);
   x_.setZero();
+
+  // std::cout << "P = \n" << P_.diagonal().transpose() << "\n";
 }
 
 // //! ITERATIVE EKF
