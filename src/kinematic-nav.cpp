@@ -162,7 +162,7 @@ void KinematicNav::Propagate(const double &dt) {
 
   Q_(6, 6) = Sa_ * dt;
   Q_(7, 7) = Q_(6, 6);
-  Q_(8, 8) = Q_(6, 6) * 4.0;
+  Q_(8, 8) = Q_(6, 6);  // * 16.0;
 
   Q_(9, 9) = LS2_ * ((Sb_ * dt) + (Sbd_ * dtsq) + (Sd_ * dtcb / 3.0));
   Q_(9, 10) = LS2_ * ((Sbd_ * dt) + (Sd_ * dtsq / 2.0));
