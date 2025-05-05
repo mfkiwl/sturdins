@@ -409,6 +409,20 @@ void KinematicNav::PhasedArrayUpdate(
   KalmanUpdate(R, H, dy);
 }
 
+void KinematicNav::AttitudeUpdate(
+    const Eigen::Ref<const Eigen::Matrix3d> &C, const Eigen::Ref<const Eigen::Matrix3d> &R) {
+  Eigen::Matrix3d C_err = C * C_b_l_.transpose();
+  // std::cout << "C_err = \n" << C_err << "\n";
+  Eigen::Vector3d dy = navtools::DeSkew<double>(C_err);
+  // std::cout << "dy = " << dy.transpose() << "\n";
+  Eigen::Matrix3Xd H{Eigen::Matrix<double, 3, 11>::Zero()};
+  H(0, 6) = 1.0;
+  H(1, 7) = 1.0;
+  H(2, 8) = 1.0;
+  // Eigen::Matrix3d R = Eigen::Matrix3d::Identity();
+  KalmanUpdate(R, H, dy);
+}
+
 void KinematicNav::KalmanUpdate(
     const Eigen::Ref<const Eigen::MatrixXd> &R,
     const Eigen::Ref<const Eigen::MatrixXd> &H,

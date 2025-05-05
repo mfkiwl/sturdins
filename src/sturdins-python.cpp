@@ -937,6 +937,28 @@ PYBIND11_MODULE(_sturdins_core, h) {
 
               Wavelength for the signal of interest [m/rad]
           )pbdoc")
+      .def(
+          "AttitudeUpdate",
+          &KinematicNav::AttitudeUpdate,
+          py::arg("C"),
+          py::arg("R"),
+          R"pbdoc(
+            AttitudeUpdate
+            ==============
+            
+            Update the navigator attitude with attitude measurement
+            
+            Parameters
+            ----------
+            
+            C : np.ndarray
+            
+                body-to-ned rotation matrix
+
+            R : np.ndarray
+            
+                DCM variance
+            )pbdoc")
       .def_readwrite("phi_", &KinematicNav::phi_)
       .def_readwrite("lam_", &KinematicNav::lam_)
       .def_readwrite("h_", &KinematicNav::h_)
@@ -1165,7 +1187,7 @@ PYBIND11_MODULE(_sturdins_core, h) {
       Parameters
       ----------
 
-      C_b_l : np.ndarray
+      C_l_b : np.ndarray
 
           Attitude DCM estimate (local-nav to body)
 
@@ -1185,7 +1207,16 @@ PYBIND11_MODULE(_sturdins_core, h) {
   // MUSIC
   ls.def(
       "MUSIC",
-      &MUSIC,
+      [](double &az_mean,
+         double &el_mean,
+         const Eigen::Ref<const Eigen::VectorXcd> &P,
+         const Eigen::Ref<const Eigen::Matrix3Xd> &ant_xyz,
+         const int &n_ant,
+         const double &lambda,
+         const double &thresh = 1e-4) {
+        MUSIC(az_mean, el_mean, P, ant_xyz, n_ant, lambda, thresh);
+        return std::pair<double, double>(az_mean, el_mean);
+      },
       py::arg("az_mean"),
       py::arg("el_mean"),
       py::arg("P"),
@@ -1193,6 +1224,7 @@ PYBIND11_MODULE(_sturdins_core, h) {
       py::arg("n_ant"),
       py::arg("lamb"),
       py::arg("thresh") = 1e-4,
+      pybind11::return_value_policy::reference_internal,
       R"pbdoc(
       MUSIC
       ===================

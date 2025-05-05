@@ -311,8 +311,8 @@ void MUSIC(
     P_music.maxCoeff(&max_az_idx, &max_el_idx);
     az_mean = az(max_az_idx);
     el_mean = el(max_el_idx);
-    az_span = res / 2.0;
-    el_span = res / 2.0;
+    az_span = res / 10.0;
+    el_span = res / 10.0;
     res /= 10.0;
     // std::cout << "az & el mean: " << az_mean * navtools::RAD2DEG<> << ", "
     //           << el_mean * navtools::RAD2DEG<> << "\n";

@@ -80,7 +80,7 @@ def MUSIC(
     n_ant: int,
     lamb: float,
     thresh: float = 0.0001,
-) -> None:
+) -> tuple[float, float]:
     """
     MUSIC
     ===================
@@ -266,7 +266,7 @@ def Wahba(
     Parameters
     ----------
 
-    C_b_l : np.ndarray
+    C_l_b : np.ndarray
 
         Attitude DCM estimate (local-nav to body)
 

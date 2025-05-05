@@ -403,7 +403,7 @@ class KinematicNav:
     """
 
     C_b_l_: numpy.ndarray[numpy.float64[3, 3]]
-    P_: numpy.ndarray[numpy.float64[m, n]]
+    P_: numpy.ndarray[numpy.float64[11, 11]]
     cb_: float
     cd_: float
     h_: float
@@ -413,6 +413,29 @@ class KinematicNav:
     vd_: float
     ve_: float
     vn_: float
+    def AttitudeUpdate(
+        self,
+        C: numpy.ndarray[numpy.float64[3, 3], numpy.ndarray.flags.f_contiguous],
+        R: numpy.ndarray[numpy.float64[3, 3], numpy.ndarray.flags.f_contiguous],
+    ) -> None:
+        """
+        AttitudeUpdate
+        ==============
+
+        Update the navigator attitude with attitude measurement
+
+        Parameters
+        ----------
+
+        C : np.ndarray
+
+            body-to-ned rotation matrix
+
+        R : np.ndarray
+
+            DCM variance
+        """
+
     def GnssUpdate(
         self,
         sv_pos: numpy.ndarray[numpy.float64[3, n], numpy.ndarray.flags.f_contiguous],

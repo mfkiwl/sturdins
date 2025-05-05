@@ -162,6 +162,9 @@ class KinematicNav {
       const int &n_ant,
       const double &lamb);
 
+  void AttitudeUpdate(
+      const Eigen::Ref<const Eigen::Matrix3d> &C, const Eigen::Ref<const Eigen::Matrix3d> &R);
+
   /**
    * @brief states
    */

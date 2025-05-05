@@ -100,7 +100,7 @@ bool PhasedArrayAttitude(
  * @param u_body_var Variance of the measured unit vectors
  */
 void Wahba(
-    Eigen::Ref<Eigen::Matrix3d> C_b_l,
+    Eigen::Ref<Eigen::Matrix3d> C_l_b,
     const Eigen::Ref<const Eigen::Matrix3Xd> &u_body,
     const Eigen::Ref<const Eigen::Matrix3Xd> &u_ned,
     const Eigen::Ref<const Eigen::VectorXd> &u_body_var);
